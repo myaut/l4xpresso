@@ -27,12 +27,12 @@ void nointerrupt() {
 
 void hard_fault_handler() {
 	dbg_panic_puts("Kernel panic: Hard fault. Restarting\n");
-	__ASM volatile("mov pc, %0" : : "r"(__l4_start));
+	// __ASM volatile("mov pc, %0" : : "r"(__l4_start));
 }
 
 void nmi_handler() {
 	dbg_panic_puts("Kernel panic: NMI. Restarting\n");
-	__ASM volatile("mov pc, %0" : : "r"(__l4_start));
+	// __ASM volatile("mov pc, %0" : : "r"(__l4_start));
 }
 
 void ext_interrupt() {

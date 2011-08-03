@@ -23,13 +23,13 @@ extern tcb_t* thread_map[CONFIG_MAX_THREADS];
 extern int thread_count;
 
 uint32_t ipc_read_mr(tcb_t* from, int i) {
-	if(i >= 8) return from->ctx.regs[i];
-	else return from->utcb->mr[i - 8];
+	if(i >= 8) return from->utcb->mr[i - 8];
+	else return from->ctx.regs[i];
 }
 
 void ipc_write_mr(tcb_t* to, int i, uint32_t data) {
-	if(i >= 8) to->ctx.regs[i] = data;
-	else to->utcb->mr[i - 8] = data;
+	if(i >= 8) to->utcb->mr[i - 8] = data;
+	else to->ctx.regs[i] = data;
 }
 
 void ipc(tcb_t* from, tcb_t* to) {
@@ -47,14 +47,14 @@ void ipc(tcb_t* from, tcb_t* to) {
 	 * */
 
 	/*Copy untyped words*/
-	for(i = 1; i < tag.s.n_untyped & 0xF; ++i) {
+	for(i = 1; i < tag.s.n_untyped && i < 15; ++i) {
 		ipc_write_mr(to, i, ipc_read_mr(from, i));
 	}
 
 	j = -1;
 	/* Copy typed words
 	 * FSM: j - number of byte*/
-	for(t = i; t < tag.s.n_typed && i < 0; ++t, ++i) {
+	for(t = i; t < tag.s.n_typed && i < 15; ++t, ++i) {
 		if(j == -1) {
 			/*If j == -1 - read tag*/
 			ti.raw = ipc_read_mr(from, i);
@@ -71,13 +71,13 @@ void ipc(tcb_t* from, tcb_t* to) {
 		}
 	}
 
-	to->utcb.sender = from->t_globalid;
+	to->utcb->sender = from->t_globalid;
 
 	to->state = T_RUNNABLE;
 	to->ipc_from = L4_NILTHREAD;
 	from->state = T_RUNNABLE;
 
-	dbg_printf(DL_IPC, "IPC: %t to %t\n", caller->t_globalid, to);
+	dbg_printf(DL_IPC, "IPC: %t to %t\n", caller->t_globalid, to->t_globalid);
 }
 
 void sys_ipc(uint32_t* param1) {
@@ -85,24 +85,24 @@ void sys_ipc(uint32_t* param1) {
 	tcb_t *to_thr = NULL;
 	l4_thread_t to = param1[REG_R0], from = param1[REG_R1];
 
-	if(to == L4_NILTHREAD) {
-		/*Only receive phases, simply lock myself*/
-		caller->state = T_RECV_BLOCKED;
-		caller->ipc_from = from;
-
-		dbg_printf(DL_IPC, "IPC: %t receiving\n", caller->t_globalid);
-	}
-	else {
+	if(to != L4_NILTHREAD) {
 		to_thr =  thread_by_globalid(to);
 
-		if(to_thr && to_thr->state == T_RECV_BLOCKED) {
-			/*To thread who waiting us*/
+		if(to_thr && to_thr->state == T_RECV_BLOCKED
+				|| to == caller->t_globalid ) {
+			/* To thread who waiting us or
+			 * send myself*/
 			ipc(caller, to_thr);
 		}
 		else if(to_thr && to_thr->state == T_INACTIVE &&
-				to_thr->utcb->t_pager == from) {
+				GLOBALID_TO_TID(to_thr->utcb->t_pager) == GLOBALID_TO_TID(caller->t_globalid)) {
 			/* That is thread start protocol */
-			thread_start(ipc_read_mr(caller, 2), ipc_read_mr(caller, 1), to_thr);
+
+			dbg_printf(DL_IPC, "IPC: %t thread start\n", to);
+
+			thread_start((void*) ipc_read_mr(caller, 2),
+							(void*) ipc_read_mr(caller, 1), 0, to_thr);
+			caller->state = T_RUNNABLE;
 		}
 		else  {
 			/*No waiting, block myself*/
@@ -112,6 +112,14 @@ void sys_ipc(uint32_t* param1) {
 			dbg_printf(DL_IPC, "IPC: %t sending\n", caller->t_globalid);
 		}
 	}
+
+	if(from != L4_NILTHREAD) {
+		/*Only receive phases, simply lock myself*/
+		caller->state = T_RECV_BLOCKED;
+		caller->ipc_from = from;
+
+		dbg_printf(DL_IPC, "IPC: %t receiving\n", caller->t_globalid);
+	}
 }
 
 uint32_t ipc_deliver(void* data) {
@@ -120,6 +128,7 @@ uint32_t ipc_deliver(void* data) {
 
 	for(i = 1; i < thread_count; ++i) {
 		thr = thread_map[i];
+
 		if(thr->state == T_RECV_BLOCKED && thr->ipc_from != L4_NILTHREAD) {
 			from_thr = thread_by_globalid(thr->ipc_from);
 
@@ -127,5 +136,5 @@ uint32_t ipc_deliver(void* data) {
 		}
 	}
 
-	return 65535;
+	return 4096;
 }

@@ -40,7 +40,7 @@ SYSTEM_CALL_BASE = 0x00000800;
 KERNEL_BASE = 0x00001000;
 USERSPACE_BASE = 0x00000C000;
 
-KERNEL_STACK_SIZE    = 0x00000200;
+KERNEL_STACK_SIZE    = 0x00000800;
 ROOT_THREAD_STACK_SIZE    = 0x00000200;
 
 GROUP(libcr_c.a libcr_eabihelpers.a) 
@@ -60,6 +60,7 @@ SECTIONS {
 	{
 		user_text_start = .;
 		./user/root_thread.o(.user_text*)
+		. = 0x00001000;
 		user_text_end = .;
 	} > MFlash512
 	

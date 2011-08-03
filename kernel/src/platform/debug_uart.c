@@ -158,13 +158,27 @@ uint8_t dbg_getchar() {
 
 }
 
+void dbg_sync_putchar(char c) {
+	if(c == '\n')
+		dbg_sync_putchar('\r');
+
+	while(!(LPC_UART3->IIR & 0x2));
+	LPC_UART3->THR = c;
+}
+
 void dbg_panic_puts(uint8_t* str)
 {
+	char chr;
+
 	/* In panic condition we can be in interrupt context or
 	 * not, so will write symbols synchronously */
 	NVIC_DisableIRQ(UART3_IRQn);
+
 	while(*str++) {
-		while(!(LPC_UART3->IIR & 0x2));
-		LPC_UART3->THR = *str;
+		dbg_sync_putchar(*str);
+	}
+
+	while(fifo_pop(&(dbg_uart.tx), &chr) != FIFO_EMPTY) {
+		dbg_sync_putchar(chr);
 	}
 }

@@ -147,6 +147,9 @@ typedef enum {
 
 void memory_init();
 
+int mempool_search(memptr_t base, size_t size);
+mempool_t* mempool_getbyid(int mpid);
+
 void create_fpage_chain(memptr_t base, size_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast);
 int create_fpages(as_t* as, memptr_t base, size_t size);
 int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,

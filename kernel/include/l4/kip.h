@@ -1,9 +1,12 @@
 /*
- * kip.h
- *
- *  Created on: 19.05.2011
- *      Author: myaut
- */
+L4Xpresso
+Copyright (c) 2011, Sergey Klyaus
+
+File: /l4xpresso/kernel/include/platform/irq.h
+Author: myaut
+
+@LICENSE
+*/
 
 #ifndef L4_KIP_H_
 #define L4_KIP_H_
@@ -15,7 +18,7 @@
 /*
  * NOTE: kip_mem_desc_t differs from L4.X2 standard
  * */
-typedef union {
+typedef struct {
 	uint32_t 	base;	/*Last 6 bits contains poolid*/
 	uint32_t	size;	/*Last 6 bits contains tag*/
 } kip_mem_desc_t;

@@ -11,6 +11,7 @@ Author: myaut
 #include <memory.h>
 #include <config.h>
 #include <debug.h>
+#include <thread.h>
 #include <ktable.h>
 
 #include <kip.h>
@@ -102,8 +103,28 @@ memptr_t mempool_align(int mpid, memptr_t addr) {
 	return addr_align(addr, CONFIG_LEAST_FPAGE_SIZE);
 }
 
+
+int mempool_search(memptr_t base, size_t size) {
+	int i;
+
+	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
+		if(memmap[i].start <= base && memmap[i].end >= (base + size) ) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+mempool_t* mempool_getbyid(int mpid) {
+	if(mpid == -1)
+		return NULL;
+
+	return memmap + mpid;
+}
+
 void memory_init() {
 	int i = 0, j = 0;
+	uint32_t* shcsr = (uint32_t*) 0xE000ED24;
 
 	ktable_init(&as_table);
 	ktable_init(&fpage_table);
@@ -117,15 +138,18 @@ void memory_init() {
 		case MPT_USER_TEXT:
 		case MPT_DEVICES:
 		case MPT_AVAILABLE:
-			mem_desc[j++].base = addr_align((memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) | i;
-			mem_desc[j++].size = addr_align((memmap[i].end - memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) |
+			mem_desc[j].base = addr_align((memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) | i;
+			mem_desc[j].size = addr_align((memmap[i].end - memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) |
 					memmap[i].tag;
 			j++;
+			break;
 		}
 	}
 
-	kip.memory_info.s.memory_desc_ptr = (uint32_t) mem_desc;
+	kip.memory_info.s.memory_desc_ptr = ((void*) mem_desc) - ((void*) &kip);
 	kip.memory_info.s.n 			  = j;
+
+	*shcsr |= 1 << 16;	/*Enable memfault*/
 }
 
 /* -------------------------------------
@@ -273,16 +297,6 @@ fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
 	else return llast;
 }
 
-int mempool_search(memptr_t base, size_t size) {
-	int i;
-
-	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
-		if(memmap[i].start <= base && memmap[i].end >= (base + size) ) {
-			return i;
-		}
-	}
-	return -1;
-}
 
 int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
 		fpage_t** plast) {
@@ -543,12 +557,24 @@ int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t acti
 }
 
 void memmanage_handler(void) {
-	uint32_t* mmsr = (uint32_t*) 0xE000ED28;
-	uint32_t* mmar = (uint32_t*) 0xE000ED34;
+	uint32_t mmar = *((uint32_t*) 0xE000ED34);
+	uint32_t mmsr = *((uint32_t*) 0xE000ED28);
+	fpage_t* fp = thread_current()->as->first;
+
+	if(mmsr & (1 << 7)) {
+		while(fp) {
+			fp = fp->as_next;
+
+			if(addr_in_fpage(mmar, fp)) {
+				thread_current()->as->lru = fp;
+				as_setup_mpu(thread_current()->as);
+
+				return;
+			}
+		}
+	}
 
 	dbg_panic_puts("Memory fault\n");
-
-	while(1);
 }
 
 #ifdef CONFIG_KDB

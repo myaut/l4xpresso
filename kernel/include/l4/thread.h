@@ -15,6 +15,7 @@ Author: myaut
 #include <platform/link.h>
 
 #define L4_NILTHREAD		0
+#define L4_ANYTHREAD		0xFFFFFFFF
 
 #define DECLARE_THREAD(name, sub) 					\
 	void name(void) __attribute__ ((naked));		\

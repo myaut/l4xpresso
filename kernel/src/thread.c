@@ -258,11 +258,15 @@ int thread_isrunnable(tcb_t* thr) {
 	return thr->state == T_RUNNABLE;
 }
 
-void thread_dispatch(tcb_t* thr) {
+int thread_dispatch(tcb_t* thr) {
 	if (thr->state == T_RUNNABLE) {
 		dbg_printf(DL_SCHEDULE, "TCB: dispatched %t\n", thr->t_globalid);
 		next_current = (volatile tcb_t*) thr;
+
+		return 1;
 	}
+
+	return 0;
 }
 
 tcb_t* thread_current() {
@@ -285,14 +289,13 @@ void thread_switch() {
 		 *	kernel is always inactive, so if we in kernel now
 		 *	we will try to switch context too*/
 		if (!thread_isrunnable((tcb_t*) current)) {
-			/*Try to reschedule if not yet done*/
-			if (!next_current)
+			if(!next_current)
 				schedule();
 
 			if (next_current) {
 				/*We already scheduled a thread, simply switch to it*/
-				dbg_printf(DL_THREAD, "TCB: switch %p -> %p\n", current,
-						next_current);
+				dbg_printf(DL_THREAD, "TCB: switch %t -> %t\n", current->t_globalid,
+						next_current->t_globalid);
 				current = next_current;
 				next_current = NULL;
 
@@ -301,21 +304,33 @@ void thread_switch() {
 			} else {
 				/* Fall into kernel, than to IDLE state (WFI)*/
 				current = kernel;
-				dbg_printf(DL_THREAD, "TCB: switch %p -> IDLE\n", current);
 			}
 		}
 	} else {
 		/*Jump to kernel*/
 		current = kernel;
-		dbg_printf(DL_THREAD, "TCB: switch %p -> kernel\n", current);
 	}
 }
 
 int schedule() {
-	tcb_t* root = THREAD_BY_TID(THREAD_ROOT);
+	static int cur_thread = 1;
+	int i = cur_thread;
 
-	if (!thread_isdispatched() && root->state == T_RUNNABLE)
-		thread_dispatch(root);
+	if (!thread_isdispatched()) {
+		/* Walk thread_map from i to i-1
+		 * while we dispatch some runnable thread
+		 * or we walk */
+		do {
+			++cur_thread;	/*Select next thread*/
+			if(cur_thread == thread_count)
+				cur_thread = 1;
+
+			if(thread_dispatch(thread_map[cur_thread])) {
+				return 1;
+			}
+
+		} while(i != cur_thread);
+	}
 
 	return 0;
 }
@@ -331,10 +346,10 @@ char* kdb_get_thread_type(tcb_t* thr) {
 		return "KERN";
 	else if (id == THREAD_ROOT)
 		return "ROOT";
-	else if (id >= THREAD_SYS)
-		return "[SYS]";
 	else if (id >= THREAD_USER)
 		return "[USR]";
+	else if (id >= THREAD_SYS)
+		return "[SYS]";
 
 	return "???";
 }
@@ -343,7 +358,7 @@ void kdb_dump_threads() {
 	tcb_t* thr;
 	int idx;
 
-	char* state[] = { "", "FREE", "RUN", "SVC", "SEND", "RECV" };
+	char* state[] = { "FREE", "RUN", "SVC", "RECV", "SEND" };
 
 	dbg_printf(DL_KDB, "%5s %8s %8s %6s %s\n", "type", "global", "local",
 			"state", "parent");

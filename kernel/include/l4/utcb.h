@@ -1,10 +1,12 @@
 /*
- * utcb.h
- *
- *  Created on: 19.05.2011
- *      Author: myaut
- */
+L4Xpresso
+Copyright (c) 2011, Sergey Klyaus
 
+File: /l4xpresso/kernel/include/platform/irq.h
+Author: myaut
+
+@LICENSE
+*/
 #ifndef UTCB_H_
 #define UTCB_H_
 

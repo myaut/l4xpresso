@@ -40,6 +40,8 @@ void debug_kdb_handler(void) {
 
 extern void root_thread(void);
 
+extern int ipc_deliver(void);
+
 utcb_t 				root_utcb	__KIP;
 extern dbg_layer_t dbg_layer;
 
@@ -47,7 +49,7 @@ uint32_t sched_handler(void* data) {
 	dbg_puts("S: Scheduler\n");
 	schedule();
 
-	return 65535;
+	return 4096;
 }
 
 int main(void) {
@@ -59,15 +61,15 @@ int main(void) {
 
 	// dbg_layer = DL_BASIC | DL_KDB | DL_THREAD;
 
-	dbg_layer = ~(DL_SCHEDULE | DL_THREAD);
+	dbg_layer = ~(DL_KTABLE | DL_KTIMER);
 
 	memory_init();
 	syscall_init();
 	thread_init();
 
 	ktimer_event_init();
-	ktimer_event_create(65535, sched_handler, NULL);
-	ktimer_event_create(65535, ipc_deliver, NULL);
+	ktimer_event_create(4096, sched_handler, NULL);
+	ktimer_event_create(4096, ipc_deliver, NULL);
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);

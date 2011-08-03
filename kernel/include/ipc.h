@@ -21,8 +21,8 @@ typedef union {
 		uint32_t	prop		: 1;
 
 		/*Number of words*/
-		uint32_t	n_untyped : 6;
 		uint32_t	n_typed : 6;
+		uint32_t	n_untyped : 6;
 	} s;
 	uint32_t raw;
 } ipc_msg_tag_t;

@@ -107,6 +107,7 @@ int ktimer_event_schedule(uint32_t ticks, ktimer_event_t* kte) {
 	if(!ticks)
 		return -1;
 	ticks -= ktimer_time;
+	kte->next = NULL;
 
 	if(event_queue == NULL) {
 		/* All other events are already handled,
