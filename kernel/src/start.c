@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/start.c
+File: /l4xpresso/kernel/src/start.c
 Author: myaut
 
 @LICENSE
@@ -67,6 +67,7 @@ int main(void) {
 
 	ktimer_event_init();
 	ktimer_event_create(65535, sched_handler, NULL);
+	ktimer_event_create(65535, ipc_deliver, NULL);
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
@@ -82,8 +83,7 @@ int main(void) {
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will
-	 * schedule softirq and call softirq_return_irq
-	 * so we will do context switching
+	 * schedule softirq and try to switch context
 	 *
 	 * If nothing to execute than sleep until next
 	 * interrupt arrives (e.g. from kernel timer)*/

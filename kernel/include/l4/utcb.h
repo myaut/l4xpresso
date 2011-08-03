@@ -13,15 +13,15 @@ struct utcb {
 	l4_thread_t t_globalid;
 	uint32_t	processor_no;
 	uint32_t 	user_defined_handle;	/*NOT used by handle*/
-	uint32_t	t_pager;
+	l4_thread_t	t_pager;
 /*+4w*/
 	uint32_t	exception_handler;
 	uint32_t	flags;					/*COP/PREEMPT flags (not used)*/
 	uint32_t	xfer_timeouts;
 	uint32_t	error_code;
 /*+8w*/
-	uint32_t	intended_receiver;
-	uint32_t	sender;
+	l4_thread_t	intended_receiver;
+	l4_thread_t	sender;
 	uint32_t	thread_word_1;
 	uint32_t	thread_word_2;
 /*+12w*/

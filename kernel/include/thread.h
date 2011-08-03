@@ -19,6 +19,23 @@ Author: myaut
 
 #include <l4/utcb.h>
 
+
+/**
+ * @file thread.h
+ * @brief Thread dispatcher definitions
+ * 
+ * Thread ID type is declared in @file types.h and called l4_thread_t
+ * 
+ * For Global Thread ID only high 18 bits are used and lower are reserved,
+ * so we call higher meaningful value TID and use GLOBALID_TO_TID and TID_TO_GLOBALID macroses
+ * for convertion
+ *
+ * Constants:
+ *      - L4_NILTHREAD  - nilthread
+ *      - L4_ANYLOCALTHREAD - anylocalthread
+ *      - L4_ANYTHREAD  - anythread
+ */
+
 #define L4_NILTHREAD		0
 #define L4_ANYLOCALTHREAD	0xFFFFFFC0
 #define L4_ANYTHREAD		0xFFFFFFFF
@@ -52,6 +69,12 @@ typedef struct {
 	uint32_t	regs[8];
 } context_t;
 
+/**
+ * Thread control block
+ * 
+ * TCB is a tree of threads, linked by t_sibling (siblings) and t_parent/t_child
+ * Contains pointers to thread's UTCB (User TCB) and address space
+ */
 struct tcb {
 	l4_thread_t t_globalid;
 	l4_thread_t t_localid;
@@ -62,8 +85,9 @@ struct tcb {
 
 	as_t* as;
 	struct utcb* utcb;
-	kip_t* kip;
 
+	l4_thread_t	ipc_from;
+    
 	struct tcb* t_sibling;
 	struct tcb* t_parent;
 	struct tcb* t_child;

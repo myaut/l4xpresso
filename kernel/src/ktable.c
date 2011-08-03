@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/ktable.c
+File: /l4xpresso/kernel/src/ktable.c
 Author: myaut
 
 @LICENSE
@@ -52,7 +52,7 @@ void kdb_dump_ktable() {
 
 #endif
 
-/*
+/**
  * Initialize kernel table kt
  *
  * @param kt - pointer to kernel table

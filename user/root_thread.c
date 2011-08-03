@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/user/root_thread.c
+File: /l4xpresso/user/root_thread.c
 Author: myaut
 
 @LICENSE
@@ -29,17 +29,6 @@ int __USER_TEXT L4_ThreadControl(l4_thread_t dest, l4_thread_t SpaceSpecifier, l
 						 : "r0", "r1", "r4");
 
 	 return result;
-}
-
-
-void __USER_TEXT L4_ExchangeRegisters(l4_thread_t dest, uint32_t control, void* sp,
-		void* pc, uint32_t flags, l4_thread_t pager, void* UserDefinedHandle) {
-	 __asm  volatile ("mov r0, %0\n"
-					  "mov r2, %1\n"
-					  "mov r3, %2\n"
-					  "mov r4, %3\n"
-					 "svc #1\n" : : "r"(dest), "r"(sp), "r"(pc), "r"(flags):
-					 "r0", "r2", "r3", "r4");
 }
 
 void __USER_TEXT L4_Ipc(l4_thread_t dest, l4_thread_t FromSpecifier, uint32_t timeouts)

@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/src/init.c
+File: /l4xpresso/src/init.c
 Author: myaut
 
 @LICENSE

@@ -25,15 +25,19 @@ typedef enum { MAP, GRANT, UNMAP } map_action_t;
 struct fpage;
 
 typedef struct {
-	uint32_t	as_spaceid;
-	struct fpage* 	first;
+	uint32_t	as_spaceid;         /*!Space Identifier*/
+	struct fpage* 	first;          /*!head of fpage list*/
 
-	struct fpage* 	lru;			/*LRU page, will be mapped as MAP_ALWAYS*/
+	struct fpage* 	lru;			/*!LRU page, will be mapped as MAP_ALWAYS*/
 } as_t;
 
-/*
- * Note that fpage format is not compliant with L4 X2 binary format
- *
+#define FPAGE_ALWAYS    0x1     /*!Fpage is always mapped in mpu*/
+#define FPAGE_CLONE     0x2     /*!Fpage is mapped from other as*/
+#define FPAGE_MAPPED    0x4     /*!Fpage is mapped with MAP (unavailable in original AS)*/
+
+/**
+ * Flexible page (fpage_t)
+ * 
  * as_next - next in address space chain
  * map_next - next in mappings chain (cycle list)
  *
@@ -60,6 +64,12 @@ struct fpage {
 };
 typedef struct fpage fpage_t;
 
+/**
+ * Memory pool represents area of physical address space
+ * We set flags to it (kernel & user permissions),
+ * and rules for fpage creation
+ * 
+ */
 typedef struct {
 #ifdef CONFIG_DEBUG
 	char*	 name;
@@ -83,11 +93,11 @@ typedef struct {
 #define MP_UX		0x0040
 
 /* Fpage type */
-#define MP_NO_FPAGE	0x0000		/* Not mappable fpages (Kernel) */
-#define MP_SRAM		0x0100		/* Fpage in SRAM: granularity 64 words*/
-#define MP_AHB_RAM	0x0200		/* Fpage in AHB SRAM: granularity 64 words, bit bang mappings*/
-#define MP_DEVICES	0x0400		/* Fpage in AHB/APB0/AHB0: granularity 16 kB*/
-#define MP_MEMPOOL	0x0800		/* Entire mempool is mapped */
+#define MP_NO_FPAGE	0x0000		/*! Not mappable */
+#define MP_SRAM		0x0100		/*! Fpage in SRAM: granularity 1 << */
+#define MP_AHB_RAM	0x0200		/*! Fpage in AHB SRAM: granularity 64 words, bit bang mappings*/
+#define MP_DEVICES	0x0400		/*! Fpage in AHB/APB0/AHB0: granularity 16 kB*/
+#define MP_MEMPOOL	0x0800		/*! Entire mempool is mapped  */
 
 /* Map memory from mempool always (for example text is mapped always because without it thread couldn't run)
  * other fpages mapped on request because we limited in MPU resources)*/
@@ -96,10 +106,6 @@ typedef struct {
 #define MP_FPAGE_MASK	0x0F00
 
 #define MP_USER_PERM(mpflags) ((mpflags & 0xF0) >> 4)
-
-#define FPAGE_ALWAYS	0x1
-#define FPAGE_CLONE 	0x2		/*Fpage is mapped from other as*/
-#define FPAGE_MAPPED 	0x4		/*Fpage is mapped with MAP (unavailable in original AS)*/
 
 typedef enum {
 	MPT_KERNEL_TEXT,
@@ -141,19 +147,23 @@ typedef enum {
 
 void memory_init();
 
-as_t* as_create(uint32_t as_spaceid);
-
 void create_fpage_chain(memptr_t base, size_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast);
 int create_fpages(as_t* as, memptr_t base, size_t size);
 int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
 		fpage_t** plast);
+
 void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last);
 void insert_fpage_to_as(as_t* as, fpage_t* fpage);
+
+int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged);
 int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action);
 int unmap_fpage(as_t* as, fpage_t* fpage);
+
+as_t* as_create(uint32_t as_spaceid);
 void as_setup_mpu(as_t* as);
 void as_map_user(as_t* as);
 void mpu_enable(mpu_state_t i);
-int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged);
+
+
 
 #endif /* MEMORY_H_ */

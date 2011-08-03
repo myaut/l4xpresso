@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/fifo.c
+File: /l4xpresso/kernel/src/fifo.c
 Author: myaut
 
 @LICENSE
@@ -57,7 +57,6 @@ uint32_t fifo_pop(struct fifo_t* queue, uint8_t* el) {
 	return FIFO_OK;
 }
 
-/*Функция fifo_length возвращает длину очереди*/
 uint32_t fifo_length(struct fifo_t* queue) {
 	return (queue->q_end >= queue->q_top)
 			? (queue->q_end - queue->q_top)

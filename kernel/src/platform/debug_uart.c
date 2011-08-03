@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/platform/debug_uart.c
+File: /l4xpresso/kernel/src/platform/debug_uart.c
 Author: myaut
 
 @LICENSE

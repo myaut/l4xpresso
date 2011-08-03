@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/memory.c
+File: /l4xpresso/kernel/src/memory.c
 Author: myaut
 
 @LICENSE
@@ -15,7 +15,9 @@ Author: myaut
 
 #include <kip.h>
 
-/* Memory management subsystem.
+/**
+ * @file    memory.c
+ * @brief   Memory management subsystem.
  *
  * Unlike traditional L4 kernels, built for "large systems" we work with small MCU, so:
  * 		- We don't have virtual memory and pages
@@ -34,11 +36,11 @@ Author: myaut
  * That why make code very complicated
  *
  * Obvious way is to use regions of standard size (e.g. 128 bytes), but it is very wasteful
- * in terms of memory faults (we have only 8 regions for MPU, so fo large ASes, we will often
+ * in terms of memory faults (we have only 8 regions for MPU, so for large ASes, we will often
  * receive memmanage faults), and fpage table.
  * */
 
-/*
+/**
  * Memory map of MPU.
  * Translated into memdesc array in KIP by memory_init
  * */
@@ -106,7 +108,6 @@ void memory_init() {
 	ktable_init(&as_table);
 	ktable_init(&fpage_table);
 
-
 	mem_desc = (kip_mem_desc_t*) kip_extra;
 
 	/* Initialize mempool table in KIP */
@@ -131,7 +132,11 @@ void memory_init() {
  * Fpage && fpage chain functions
  * ------------------------------------- */
 
-/*
+/**
+ * Insert chain of fpages into address space
+ * @param first,last (first, last) - fpage chain
+ * @param as address space
+ * 
  * NOTE: as and fpage chain couldn't overlap
  * if they do, use insert_fpage_to_as which checks every fpage
  * */

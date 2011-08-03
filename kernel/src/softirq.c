@@ -2,7 +2,7 @@
 L4Xpresso
 Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/softirq.c
+File: /l4xpresso/kernel/src/softirq.c
 Author: myaut
 
 @LICENSE

@@ -2,7 +2,7 @@
  L4Xpresso
  Copyright (c) 2011, Sergey Klyaus
 
- File: /leo4-mcu/kernel/src/thread.c
+ File: /l4xpresso/kernel/src/thread.c
  Author: myaut
 
  @LICENSE
@@ -15,8 +15,9 @@
 #include <platform/irq.h>
 #include <platform/armv7m.h>
 
-/*
- * Main thread dispatcher
+/**
+ * @file    thread.c
+ * @brief   Main thread dispatcher
  *
  * Each thread has it's own Thread Control Block (struct tcb_t) and addressed by
  * it's global id. However, globalid are very wasteful - we reserve 3 global ids for
@@ -159,7 +160,6 @@ tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
 
 	thr->as = NULL;
 	thr->utcb = utcb;
-	thr->kip = NULL;
 	thr->state = T_INACTIVE;
 
 	dbg_printf(DL_THREAD, "T: New thread: %t @[%p] \n", globalid, thr);
@@ -310,28 +310,6 @@ void thread_switch() {
 		dbg_printf(DL_THREAD, "TCB: switch %p -> kernel\n", current);
 	}
 }
-
-#if 0
-void deliver_ipc() {
-	tcb_t* thr = NULL, *from_thr = NULL;
-	int idx;
-
-	for_each_in_ktable(thr, idx, (&thread_table)) {
-		if(thr->state == T_RECV_BLOCKED) {
-			/*Check if somebody sending us*/
-			if(thr->t_from != L4_NILTHREAD) {
-				from_thr = thread_by_globalid(thr->t_from);
-
-				dbg_printf(DL_IPC, "IPC: %t to %t (sched)\n", thr->t_from, thr->t_globalid);
-
-				from_thr->state = T_RUNNABLE;
-				thr->state = T_RUNNABLE;
-				thr->t_from = L4_NILTHREAD;
-			}
-		}
-	}
-}
-#endif
 
 int schedule() {
 	tcb_t* root = THREAD_BY_TID(THREAD_ROOT);
