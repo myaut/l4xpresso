@@ -21,7 +21,7 @@ Author: myaut
 #include <types.h>
 #include <debug.h>
 #include <kdb.h>
-#include <thread.h>
+#include <ktimer.h>
 
 struct kip {
 	uint32_t	kernel_id;
@@ -43,12 +43,33 @@ struct kip kip __KIP = {
 
 extern dbg_handler_t dbg_handler;
 
+uint32_t test_handler1(ktimer_event_t* kte) {
+	dbg_puts("Hello from Siberia!\n");
+
+	return 0;
+}
+
+uint32_t test_handler2(ktimer_event_t* kte) {
+	dbg_puts("Hello from Yamayka!\n");
+
+	return 163840;
+}
+
+uint32_t test_handler3(ktimer_event_t* kte) {
+	dbg_puts("Hello from Omikron 8!\n");
+
+	return 81920;
+}
+
 int main(void) {
 	dbg_uart_init(38400);
 	dbg_puts("\n\n---------------------------------------"
 			"\nL4Xpresso hello!\n");
 
-	thread_init();
+	ktimer_event_init();
+	ktimer_event_create(65535,  test_handler1, NULL);
+	ktimer_event_create(163840, test_handler2, NULL);
+	ktimer_event_create(128000, test_handler3, NULL);
 
 	while(1) {
 		kdb_handler(dbg_getchar());
@@ -83,5 +104,6 @@ void __l4_start() {
           "        blt     zero_loop");
 
 	SystemInit();
+
     __main();
 }

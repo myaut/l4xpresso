@@ -18,11 +18,20 @@ Author: myaut
 static ktable_t* kdb_ktables[KTABLE_NUM];
 static uint8_t	 kdb_ktable_cnt;
 
+extern void kdb_dump_events(void);
+extern void kdb_show_ktimer();
+
 int kdb_handler(char c) {
 	switch(c) {
 	case 'K':
 		/*Dump kernel tables*/
 		kdb_dump_ktable();
+		return 0;
+	case 'e':
+		kdb_dump_events();
+		return 0;
+	case 'n':
+		kdb_show_ktimer();
 		return 0;
 	case '?':
 		kdb_print_menu();
@@ -62,6 +71,7 @@ void kdb_dump_ktable() {
 
 void kdb_print_menu() {
 	dbg_printf(	"L4Xpresso KDB Menu:\n"
-				" K - print kernel tables"
-				"\n\n");
+				" K - print kernel tables\n"
+				" e - dump ktimer events\n"
+				" n - show timer (now)\n");
 }

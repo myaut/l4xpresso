@@ -33,16 +33,16 @@ Author: myaut
 #define LSR_TEMT	0x40
 #define LSR_RXFE	0x80
 
-#define SEND_BUFSIZE    128
+#define SEND_BUFSIZE    2048
 #define RECV_BUFSIZE    32
 
-volatile struct dbg_uart_t {
+struct dbg_uart_t {
 	uint32_t status;
 	uint32_t ready;
 
 	/*Queues for RX and TX*/
-	FIFO(uint8_t, SEND_BUFSIZE) tx;
-	FIFO(uint8_t, RECV_BUFSIZE) rx;
+	struct fifo_t tx;
+	struct fifo_t rx;
 };
 
 void dbg_uart_init(uint32_t baudrate);

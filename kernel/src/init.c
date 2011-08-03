@@ -13,6 +13,8 @@ Author: myaut
 
 #include <debug.h>
 
+#include <ktimer.h>
+
 extern void __l4_start(void);
 
 void nointerrupt() {
@@ -55,7 +57,7 @@ void (* const g_pfnVectors[])(void) = {
 	nointerrupt,						// Debug monitor handler
 	0,										// Reserved
 	nointerrupt,							// The PendSV handler
-	nointerrupt,						// The SysTick handler
+	ktimer_handler, 				// The SysTick handler
 
 	// Chip Level - LPC17
 	ext_interrupt,							// 16, 0x40 - WDT

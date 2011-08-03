@@ -9,8 +9,12 @@ Author: myaut
 */
 
 #include <platform/debug_uart.h>
+#include <fifo.h>
 
 static struct dbg_uart_t dbg_uart;
+static uint8_t dbg_uart_tx_buffer[SEND_BUFSIZE];
+static uint8_t dbg_uart_rx_buffer[RECV_BUFSIZE];
+
 dbg_handler_t dbg_handler;
 
 void dbg_uart_init(uint32_t baudrate)
@@ -53,6 +57,8 @@ void dbg_uart_init(uint32_t baudrate)
   LPC_UART3->IER = IER_RBR | IER_THRE | IER_RLS;	/* Enable UART3 interrupt */
 
   dbg_uart.ready = 1;
+  fifo_init(&(dbg_uart.tx), dbg_uart_tx_buffer, SEND_BUFSIZE);
+  fifo_init(&(dbg_uart.rx), dbg_uart_rx_buffer, RECV_BUFSIZE);
 }
 
 static void dbg_uart_recv() {
@@ -63,14 +69,17 @@ static void dbg_uart_recv() {
 	}
 	else {
 		/*Put symbol on queue*/
-		FIFO_PUT(dbg_uart.rx, chr, RECV_BUFSIZE);
+		fifo_push(&(dbg_uart.rx), chr);
 	}
 }
 
 void dbg_uart_send(int avail) {
+	uint8_t chr;
+
 	if(avail) {
-		if(dbg_uart.tx.length != 0) {
-			FIFO_GET(LPC_UART3->THR, dbg_uart.tx, SEND_BUFSIZE);
+		if(fifo_state(&(dbg_uart.tx)) != FIFO_EMPTY) {
+			fifo_pop(&(dbg_uart.tx), &chr);
+			LPC_UART3->THR = chr;
 			dbg_uart.ready = 0;
 		}
 		else {
@@ -129,9 +138,10 @@ void dbg_uart_interrupt (void)
 
 void dbg_putchar(uint8_t chr)
 {
+	/*If UART is busy, try to put chr into queue until
+	 * slot is freed else write directly into UART */
 	if(!dbg_uart.ready) {
-		while()
-		FIFO_PUT(dbg_uart.tx, chr, SEND_BUFSIZE);
+		while(fifo_push(&(dbg_uart.tx), chr) != FIFO_OK);
 	}
 	else {
 		LPC_UART3->THR = chr;
@@ -142,7 +152,9 @@ void dbg_putchar(uint8_t chr)
 uint8_t dbg_getchar() {
 	uint8_t chr = 0;
 
-	FIFO_GET(chr, dbg_uart.rx, RECV_BUFSIZE);
+	if(fifo_pop(&(dbg_uart.rx), &chr) == FIFO_EMPTY)
+		return 0;
+	else
+		return chr;
 
-	return chr;
 }
