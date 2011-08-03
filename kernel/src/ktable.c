@@ -58,8 +58,8 @@ void kdb_dump_ktable() {
  * @param kt - pointer to kernel table
  * */
 void ktable_init(ktable_t* kt) {
-	uint32_t  *kt_ptr = (uint32_t*) kt->bitmap,
-			  *kt_end = (uint32_t*) kt->bitmap + kt->num / 8;
+	char	  *kt_ptr = (char*) kt->bitmap,
+			  *kt_end = (char*) kt->bitmap + kt->num / 8;
 
 	while(kt_ptr != kt_end)
 		*(kt_ptr++) = 0x0;

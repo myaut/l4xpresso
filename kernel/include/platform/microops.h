@@ -14,7 +14,7 @@ Author: myaut
 #include <types.h>
 
 typedef uint32_t spinlock_t;
-typedef	uint32_t atomic_t;
+typedef	 uint32_t atomic_t;
 
 #define SPINLOCK_INITIALIZER 	0x0
 
@@ -32,5 +32,7 @@ uint32_t test_and_set(uint32_t* atom);
 /*IRQ disable/enable*/
 void irq_disable(void);
 void irq_enable(void);
+
+int irq_number();
 
 #endif /* MICOROPS_H_ */

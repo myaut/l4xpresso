@@ -17,6 +17,7 @@ Author: myaut
 #include <ktimer.h>
 
 extern void __l4_start(void);
+extern void memmanage_handler(void);
 
 void nointerrupt() {
 	while(1) {
@@ -24,14 +25,14 @@ void nointerrupt() {
 	}
 }
 
-void hard_fault_interrupt() {
+void hard_fault_handler() {
 	dbg_panic_puts("Kernel panic: Hard fault. Restarting\n");
-	__l4_start();
+	__ASM volatile("mov pc, %0" : : "r"(__l4_start));
 }
 
-void nmi_interrupt() {
+void nmi_handler() {
 	dbg_panic_puts("Kernel panic: NMI. Restarting\n");
-	__l4_start();
+	__ASM volatile("mov pc, %0" : : "r"(__l4_start));
 }
 
 void ext_interrupt() {
@@ -50,9 +51,9 @@ void (* const g_pfnVectors[])(void) = {
 	// Core Level - CM3
 	&kernel_stack_addr, 					// The initial stack pointer
 	__l4_start,							// The reset handler
-	nmi_interrupt,						// The NMI handler
-	hard_fault_interrupt,						// The hard fault handler
-	nointerrupt,						// The MPU fault handler
+	nmi_handler,						// The NMI handler
+	hard_fault_handler,						// The hard fault handler
+	memmanage_handler,						// The MPU fault handler
 	nointerrupt,						// The bus fault handler
 	nointerrupt,						// The usage fault handler
 	0,										// Reserved

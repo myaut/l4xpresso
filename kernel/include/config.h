@@ -33,4 +33,6 @@ enum {
 
 #define CONFIG_INTR_THREAD_MAX	256
 
+#define CONFIG_KIP_EXTRA_SIZE	128
+
 #endif /* CONFIG_H_ */

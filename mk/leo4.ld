@@ -57,10 +57,9 @@ SECTIONS {
 	} > MFlash512
 	
 	.user_text 0x0000C000 : 
-	ALIGN (256)
 	{
 		user_text_start = .;
-		*(.user_text*)
+		./user/root_thread.o(.user_text*)
 		user_text_end = .;
 	} > MFlash512
 	
@@ -72,6 +71,7 @@ SECTIONS {
 	
 	.data :
 	AT( ADDR(.text) + SIZEOF(.text) )
+	ALIGN (128) 
 	{
 		kernel_data_start = .;
 		kip_start = .;
@@ -94,7 +94,7 @@ SECTIONS {
 	
 	.user_data : 
 	AT( ADDR(.user_text) + SIZEOF(.user_text) )
-	ALIGN (256)
+	ALIGN (128)
 	{
 		user_data_start = .;
 		root_stack_start = .;
@@ -105,7 +105,7 @@ SECTIONS {
 	} > RamLoc32 
 	
 	.user_bss (NOLOAD) :
-	ALIGN (256)
+	ALIGN (128)
 	{
 		user_bss_start = .;
 		*(.user_bss*)

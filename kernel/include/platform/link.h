@@ -37,6 +37,9 @@ extern uint32_t user_bss_end;
 extern uint32_t root_stack_start;
 extern uint32_t root_stack_end;
 
+extern uint32_t kip_start;
+extern uint32_t kip_end;
+
 extern void kernel_stack_addr(void);
 
 #define __BSS 			__attribute__ ((section(".bss")))

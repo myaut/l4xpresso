@@ -15,10 +15,38 @@ Author: myaut
 
 #include <kip.h>
 
+/* Memory management subsystem.
+ *
+ * Unlike traditional L4 kernels, built for "large systems" we work with small MCU, so:
+ * 		- We don't have virtual memory and pages
+ * 		- RAM is small, but physical address space is big (32-bit), and it include
+ * 		  devices, flash, bit-bang regions
+ * 		- We have memory protection unit with only 8 regions
+ *
+ * Memory management is split into three conceptions:
+ * 		- Memory pool (mempool_t), which represent area of PAS with specific attributes
+ * 		  (hardcoded in memmap table),
+ * 		- Flexible page (fpage_t) - unlike traditional fpages in L4, they represent MPU region
+ * 		- Address space (as_t) - sorted list of fpages bound to specific thread(s)
+ *
+ * MPU in Cortex-M3 support only regions of 2 ^ n size, so if we want create page of 96 bytes for example,
+ * we should split it into smaller ones, and create fpage chain consisting of 32 byte and 64 byte fpages
+ * That why make code very complicated
+ *
+ * Obvious way is to use regions of standard size (e.g. 128 bytes), but it is very wasteful
+ * in terms of memory faults (we have only 8 regions for MPU, so fo large ASes, we will often
+ * receive memmanage faults), and fpage table.
+ * */
+
+/*
+ * Memory map of MPU.
+ * Translated into memdesc array in KIP by memory_init
+ * */
 static mempool_t memmap[] = {
 	DECLARE_MEMPOOL_2("KTEXT", kernel_text, MP_KR | MP_KX | MP_NO_FPAGE, MPT_KERNEL_TEXT),
 	DECLARE_MEMPOOL_2("UTEXT", user_text, MP_UR | MP_UX | MP_MEMPOOL | MP_MAP_ALWAYS, MPT_USER_TEXT),
-	DECLARE_MEMPOOL_2("KDATA", kernel_data, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
+	DECLARE_MEMPOOL_2("KIP", kip, MP_KR | MP_KW | MP_UR | MP_SRAM, MPT_KERNEL_DATA),
+	DECLARE_MEMPOOL  ("KDATA", &kip_end, &kernel_data_end, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
 	DECLARE_MEMPOOL_2("KBSS",  kernel_bss, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
 	DECLARE_MEMPOOL_2("UDATA", user_data, MP_UR | MP_UW | MP_MEMPOOL | MP_MAP_ALWAYS, MPT_USER_DATA),
 	DECLARE_MEMPOOL_2("UBSS",  user_bss, MP_UR | MP_UW | MP_MEMPOOL  | MP_MAP_ALWAYS, MPT_USER_DATA),
@@ -32,7 +60,14 @@ static mempool_t memmap[] = {
 DECLARE_KTABLE(as_t, as_table, CONFIG_MAX_ADRESS_SPACES);
 DECLARE_KTABLE(fpage_t, fpage_table, CONFIG_MAX_FPAGES);
 
-memptr_t addr_align(memptr_t addr, uint32_t size) {
+extern kip_mem_desc_t* mem_desc;
+extern char* kip_extra;
+
+/* -------------------------------------
+ * Some helper functions
+ * ------------------------------------- */
+
+memptr_t addr_align(memptr_t addr, size_t size) {
 	if(addr & (size - 1))
 		return (addr & ~(size - 1)) + size;
 	else
@@ -61,6 +96,8 @@ memptr_t mempool_align(int mpid, memptr_t addr) {
 	case MP_DEVICES:
 		return addr & 0xFFFC0000;
 	}
+
+	return addr_align(addr, CONFIG_LEAST_FPAGE_SIZE);
 }
 
 void memory_init() {
@@ -68,6 +105,9 @@ void memory_init() {
 
 	ktable_init(&as_table);
 	ktable_init(&fpage_table);
+
+
+	mem_desc = (kip_mem_desc_t*) kip_extra;
 
 	/* Initialize mempool table in KIP */
 	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
@@ -83,9 +123,13 @@ void memory_init() {
 		}
 	}
 
-	kip.memory_info.s.memory_desc_ptr = mem_desc;
+	kip.memory_info.s.memory_desc_ptr = (uint32_t) mem_desc;
 	kip.memory_info.s.n 			  = j;
 }
+
+/* -------------------------------------
+ * Fpage && fpage chain functions
+ * ------------------------------------- */
 
 /*
  * NOTE: as and fpage chain couldn't overlap
@@ -95,16 +139,18 @@ void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last) {
 	fpage_t* p = as->first;
 
 	if(!p) {
+		/*First chain in AS*/
 		as->first = first;
 		return;
 	}
 
 	if(last->fpage.base < p->fpage.base) {
-		/*Map into beginning*/
+		/*Add chain into beginning*/
 		last->as_next = as->first;
 		as->first = first;
 	}
 	else {
+		/*Search for chain in the middle*/
 		while(p->as_next != NULL) {
 			if(last->fpage.base < p->as_next->fpage.base) {
 				last->as_next = p->as_next;
@@ -113,9 +159,9 @@ void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last) {
 
 			p = p->as_next;
 		}
-	}
 
-	p->as_next = first;
+		p->as_next = first;
+	}
 }
 
 void insert_fpage_to_as(as_t* as, fpage_t* fpage) {
@@ -137,6 +183,8 @@ void remove_fpage_from_as(as_t* as, fpage_t* fp) {
 	fpprev->as_next = fp->as_next;
 }
 
+/* FIXME: Support for bit-bang regions! */
+
 fpage_t* create_fpage(memptr_t base, size_t shift, as_t* as, int mpid) {
 	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
 
@@ -157,7 +205,7 @@ fpage_t* create_fpage(memptr_t base, size_t shift, as_t* as, int mpid) {
 	return fpage;
 }
 
-void create_fpage_chain(memptr_t base, memptr_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast) {
+void create_fpage_chain(memptr_t base, size_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast) {
 	int shift, sshift, bshift;
 	fpage_t* fpage = NULL;
 
@@ -170,12 +218,13 @@ void create_fpage_chain(memptr_t base, memptr_t size, as_t* as, int mpid, fpage_
 
 		if(!*pfirst) {
 			/*Create first page*/
-			fpage = create_fpage(mpid, as, base, shift);
+			fpage = create_fpage(base, shift, as, mpid);
 			*pfirst = fpage;
+			*plast = fpage;
 		}
 		else {
 			/*Build chain*/
-			fpage->as_next = create_fpage(mpid, as, base, shift);
+			fpage->as_next = create_fpage(base, shift, as, mpid);
 			*plast = fpage;
 			fpage = fpage->as_next;
 		}
@@ -190,6 +239,9 @@ fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
 			 end = fpage->fpage.base + (1 << fpage->fpage.shift);
 	fpage_t *lfirst, *llast, *rfirst, *rlast;
 	split = mempool_align(fpage->fpage.mpid, split);
+
+	if(!as)
+		return NULL;
 
 	/*Check if we can split something*/
 	if(split == base || split == end) {
@@ -206,7 +258,7 @@ fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
 	create_fpage_chain(base, (split - base), as, fpage->fpage.mpid, &lfirst, &llast);
 	create_fpage_chain(split,(end - split),  as, fpage->fpage.mpid, &rfirst, &rlast);
 
-	remove_fpage_from_as(fpage);
+	remove_fpage_from_as(as, fpage);
 	ktable_free(&fpage_table, fpage);
 
 	insert_fpage_chain_to_as(as, lfirst, llast);
@@ -216,7 +268,7 @@ fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
 	else return llast;
 }
 
-int mempool_search(memptr_t base, memptr_t size) {
+int mempool_search(memptr_t base, size_t size) {
 	int i;
 
 	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
@@ -227,9 +279,8 @@ int mempool_search(memptr_t base, memptr_t size) {
 	return -1;
 }
 
-int create_fpages_ext(int mpid, as_t* as, memptr_t base, memptr_t size, fpage_t** pfirst,
+int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
 		fpage_t** plast) {
-	fpage_t *fpage = NULL;
 
 	if(size == 0)
 		return -2;
@@ -242,24 +293,19 @@ int create_fpages_ext(int mpid, as_t* as, memptr_t base, memptr_t size, fpage_t*
 		}
 	}
 
-
-	/* Create chain of fpages
-	 *
-	 * MPU in Cortex-M3 support only regions of 2 ^ n size, so if we want create page of 96 bytes for example,
-	 * we should split it into smaller ones
-	 * */
-
 	dbg_printf(DL_MEMORY, "MEM: fpage chain %s [b:%p, sz:%p] as %p\n", memmap[mpid].name, base, size, as);
 
 	create_fpage_chain(mempool_align(mpid, base), mempool_align(mpid, size), as, mpid, pfirst, plast);
-	insert_fpage_chain_to_as(as, *pfirst, *plast);
+
+	if(as)
+		insert_fpage_chain_to_as(as, *pfirst, *plast);
 
 	return 0;
 }
 
-int create_fpages(as_t* as, memptr_t base, memptr_t size) {
+int create_fpages(as_t* as, memptr_t base, size_t size) {
 	fpage_t *first = NULL, *last = NULL;
-	create_fpages_ext(-1, as, base, size, &first, &last);
+	return create_fpages_ext(-1, as, base, size, &first, &last);
 }
 
 /*
@@ -280,6 +326,10 @@ void mpu_enable(mpu_state_t i) {
 	/*0x4 is PRIVDEFENA bit that allows access from kernel*/
 	*mpu_ctrl = i | 0x4;
 }
+
+/* -------------------------------------
+ * AS functions
+ * ------------------------------------- */
 
 void as_setup_mpu(as_t* as) {
 	fpage_t* mpu[8];
@@ -317,6 +367,8 @@ void as_setup_mpu(as_t* as) {
 }
 
 void as_map_user(as_t* as) {
+	int i;
+
 	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
 		switch(memmap[i].tag) {
 		case MPT_USER_DATA:
@@ -329,7 +381,6 @@ void as_map_user(as_t* as) {
 
 as_t* as_create(uint32_t as_spaceid) {
 	as_t* as = (as_t*) ktable_alloc(&as_table);
-	int i;
 
 	/*assert as == NULL*/
 
@@ -342,7 +393,9 @@ as_t* as_create(uint32_t as_spaceid) {
 int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action) {
 	fpage_t* fpmap = (fpage_t*) ktable_alloc(&fpage_table);
 
-	/*FIXME: check for fpage == NULL*/
+	/*FIXME: check for fpmap == NULL*/
+	fpmap->as_next = NULL;
+	fpmap->as = dst;
 
 	/*Copy fpage description*/
 	fpmap->raw[0] = fpage->raw[0];
@@ -358,7 +411,7 @@ int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action) {
 	fpage->map_next = fpmap;
 
 	/*Insert into AS*/
-	insert_fpage_to_as(dst, fpage);
+	insert_fpage_to_as(dst, fpmap);
 
 	dbg_printf(DL_MEMORY, "MEM: %s fpage %p from %p to %p\n", (action == MAP)? "mapped" : "granted", fpage, src, dst);
 
@@ -478,12 +531,20 @@ int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t acti
 	fp = first;
 	do {
 		map_fpage(src, dst, fp, action);
-		fp = fp->next;
+		fp = fp->as_next;
 	} while(fp != last);
 
 	return 0;
 }
 
+void memmanage_handler(void) {
+	uint32_t* mmsr = (uint32_t*) 0xE000ED28;
+	uint32_t* mmar = (uint32_t*) 0xE000ED34;
+
+	dbg_panic_puts("Memory fault\n");
+
+	while(1);
+}
 
 #ifdef CONFIG_KDB
 

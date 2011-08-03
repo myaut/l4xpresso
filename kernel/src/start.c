@@ -40,7 +40,7 @@ void debug_kdb_handler(void) {
 
 extern void root_thread(void);
 
-utcb_t 				root_utcb;
+utcb_t 				root_utcb	__KIP;
 extern dbg_layer_t dbg_layer;
 
 uint32_t sched_handler(void* data) {
@@ -55,24 +55,27 @@ int main(void) {
 
 	dbg_uart_init(115200);
 	dbg_puts("\n\n---------------------------------------"
-			"\nL4Xpresso hello!\n");
+			 "\nL4Xpresso hello!\n");
 
 	// dbg_layer = DL_BASIC | DL_KDB | DL_THREAD;
 
-	dbg_layer =  DL_BASIC | DL_KDB | DL_IPC | DL_SCHEDULE;
+	dbg_layer = ~(DL_SCHEDULE | DL_THREAD);
 
 	memory_init();
 	syscall_init();
 	thread_init();
 
 	ktimer_event_init();
-	ktimer_event_create(65535,  sched_handler, NULL);
+	ktimer_event_create(65535, sched_handler, NULL);
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
 	root = thread_create(TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
+	thread_space(root, TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
+	as_map_user(root->as);
+
 	thread_start((void*) &root_stack_end, root_thread, 0, root);
 
 	mpu_enable(MPU_ENABLED);

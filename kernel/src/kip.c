@@ -9,14 +9,17 @@ Author: myaut
 */
 
 #include <kip.h>
+#include <config.h>
 #include <platform/link.h>
 
 kip_t kip __KIP = {
-	.kernel_id = 'L4\230K',		/*ITMO*/
+	.kernel_id = 0x00000000,
 	.api_version = 0x8507000,	/*Ver. M.2 Rev. 1*/
 	.api_flags	= 0x00000000,	/*Little endian 32-bit*/
 };
 
 /*Extra information on KIP*/
-char kip_extra[128] __KIP;
-kip_mem_desc_t* mem_desc = kip_extra;
+char __kip_extra[CONFIG_KIP_EXTRA_SIZE] __KIP = "";
+char* kip_extra = &__kip_extra[0];
+
+kip_mem_desc_t* mem_desc = NULL;

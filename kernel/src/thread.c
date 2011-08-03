@@ -54,7 +54,14 @@ volatile tcb_t* current; // Currently on CPU
 volatile tcb_t* kernel; // Kernel thread
 volatile tcb_t* next_current; // Next dispatched on CPU
 
+/*KIP declarations*/
+fpage_t *kip_fpage, *kip_extra_fpage;
+extern kip_t kip;
+extern char* kip_extra;
+
 void thread_init() {
+	fpage_t* last = NULL;
+
 	ktable_init(&thread_table);
 
 	/* Pre-allocate system threads and set kernel as dispatched*/
@@ -64,6 +71,14 @@ void thread_init() {
 	kernel->ctx.ctl = 0x0;
 
 	current = kernel;
+
+	kip.thread_info.s.system_base = THREAD_SYS;
+	kip.thread_info.s.user_base = THREAD_USER;
+
+	/* Create KIP fpages
+	 * last is ignored, because kip fpages is aligned*/
+	create_fpages_ext(-1, NULL, (memptr_t) &kip, sizeof(kip_t), &kip_fpage, &last);
+	create_fpages_ext(-1, NULL, (memptr_t) kip_extra, CONFIG_KIP_EXTRA_SIZE, &kip_extra_fpage, &last);
 }
 
 extern tcb_t* caller;
@@ -121,7 +136,7 @@ void thread_map_insert(l4_thread_t globalid, tcb_t* thr) {
 /**
  * Create thread
  */
-tcb_t* thread_create(l4_thread_t globalid, l4_thread_t spaceid, utcb_t* utcb) {
+tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
 	tcb_t *thr;
 	int id;
 
@@ -139,8 +154,11 @@ tcb_t* thread_create(l4_thread_t globalid, l4_thread_t spaceid, utcb_t* utcb) {
 	thr->t_sibling = NULL;
 
 	thr->t_globalid = globalid;
+	if(utcb)
+		utcb->t_globalid = globalid;
+
 	thr->as = NULL;
-	thr->utcb = NULL;
+	thr->utcb = utcb;
 	thr->kip = NULL;
 	thr->state = T_INACTIVE;
 
@@ -166,7 +184,6 @@ tcb_t* thread_create(l4_thread_t globalid, l4_thread_t spaceid, utcb_t* utcb) {
 
 			thr->t_localid = (1 << 6);
 		}
-		thread_space(thr, spaceid, utcb);
 	}
 
 	return thr;
@@ -176,11 +193,11 @@ void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb) {
 	/* If spaceid == dest than create new address space
 	 * else share address space between threads */
 	if (GLOBALID_TO_TID(thr->t_globalid) == GLOBALID_TO_TID(spaceid)) {
-		thr->as = as_create(globalid);
+		thr->as = as_create(thr->t_globalid);
 
 		/*Grant kip_fpage & kip_ext_fpage only to new AS*/
 		map_fpage(NULL, thr->as, kip_fpage, GRANT);
-		map_fpage(NULL, thr->as, kip_ext_fpage, GRANT);
+		map_fpage(NULL, thr->as, kip_extra_fpage, GRANT);
 
 		dbg_printf(DL_THREAD, "\tNew space: as: %p, utcb: %p \n", thr->as, utcb);
 	} else {
@@ -188,21 +205,28 @@ void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb) {
 
 		thr->as = space->as;
 	}
-	map_area(caller->as, thr->as, (void*) utcb, sizeof(utcb_t), GRANT, thread_ispriviliged(caller));
+
+	/* If no caller, than it is mapping from kernel to root thread
+	 * (some special case for root_utcb) */
+	if(caller)
+		map_area(caller->as, thr->as, (memptr_t) utcb,
+				sizeof(utcb_t), GRANT, thread_ispriviliged(caller));
+	else
+		map_area(thr->as, thr->as, (memptr_t) utcb, sizeof(utcb_t), GRANT, 1);
 }
 
 void thread_start(void* sp, void* pc, uint32_t xpsr, tcb_t *thr) {
 	/* Reserve 8 words for fake context */
 	sp -= 8 * sizeof(uint32_t);
-	thr->ctx.sp = sp;
+	thr->ctx.sp = (uint32_t) sp;
 
 	/*Set EXC_RETURN and CONTROL for user thread*/
 	thr->ctx.ret = 0xFFFFFFFD;
 	thr->ctx.ctl = 0x3;
 
 	/* Stack allocated, now use fake pc, lr, xpsr */
-	((uint32_t*) sp)[REG_R0] = 0x0;
-	((uint32_t*) sp)[REG_R1] = 0x0;
+	((uint32_t*) sp)[REG_R0] = (uint32_t) &kip;
+	((uint32_t*) sp)[REG_R1] = (uint32_t) thr->utcb;
 	((uint32_t*) sp)[REG_R2] = 0x0;
 	((uint32_t*) sp)[REG_R3] = 0x0;
 	((uint32_t*) sp)[REG_R12] = 0x0;
@@ -260,7 +284,7 @@ void thread_switch() {
 		 *
 		 *	kernel is always inactive, so if we in kernel now
 		 *	we will try to switch context too*/
-		if (!thread_isrunnable(current)) {
+		if (!thread_isrunnable((tcb_t*) current)) {
 			/*Try to reschedule if not yet done*/
 			if (!next_current)
 				schedule();
