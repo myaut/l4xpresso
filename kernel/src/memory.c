@@ -192,7 +192,8 @@ void mpu_setup_region(int n, fpage_t* fp) {
 void mpu_enable(mpu_state_t i) {
 	static uint32_t* mpu_ctrl = (uint32_t*) 0xE000ED94;
 
-	*mpu_ctrl = i;
+	/*0x4 is PRIVDEFENA bit that allows access from kernel*/
+	*mpu_ctrl = i | 0x4;
 }
 
 void as_setup_mpu(as_t* as) {

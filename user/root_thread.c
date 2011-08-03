@@ -16,7 +16,6 @@ void __USER_TEXT __dummy_thread() {
 	while(1) {
 		__asm volatile("mov r0, #0x1000");
 		__asm volatile("svc #0");
-		//__asm volatile("mov r0, [0x1000]");
 
 		for(delay = 0; delay < 10000000; ++delay);
 	}
