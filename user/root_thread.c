@@ -10,7 +10,7 @@ Author: myaut
 
 #include <l4/thread.h>
 
-void __dummy_thread()  {
+void __USER_TEXT __dummy_thread() {
 	while(1);
 	while(1) {
 		__asm volatile("mov r0, 0x1000");

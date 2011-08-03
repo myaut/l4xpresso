@@ -29,6 +29,7 @@ extern void kdb_dump_ktable(void);
 extern void kdb_show_ktimer(void);
 extern void kdb_dump_softirq(void);
 extern void kdb_dump_threads(void);
+extern void kdb_dump_mempool(void);
 
 struct kdb_t kdb_functions[] =
 {
@@ -56,6 +57,11 @@ struct kdb_t kdb_functions[] =
 		.option = 't',
 		.menuentry = "dump threads",
 		.function = kdb_dump_threads
+	},
+	{
+		.option = 'm',
+		.menuentry = "dump memory pools",
+		.function = kdb_dump_mempool
 	},
 	/*Insert KDB functions here*/
 };

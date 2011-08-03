@@ -12,6 +12,10 @@ Author: myaut
 #include <platform/microops.h>
 #include <config.h>
 
+#ifdef CONFIG_SMP
+
+/*For future use :-) */
+
 /* Basic spinlock ops for ARMv7m architecture */
 int spinlock_trylock(spinlock_t* sl) {
 	int result = 0;	/* Assuming lock is busy*/
@@ -65,6 +69,21 @@ uint32_t atomic_get(atomic_t* atom) {
 
 	return result;
 }
+
+#else
+
+void atomic_set(atomic_t* atom, atomic_t newval) {
+	*atom = newval;
+}
+
+uint32_t atomic_get(atomic_t* atom) {
+	return *atom;
+}
+
+
+#endif
+
+
 
 void irq_disable(void) {
 	__ASM volatile ("cpsid i");

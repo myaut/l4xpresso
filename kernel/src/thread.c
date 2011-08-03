@@ -75,6 +75,7 @@ void thread_start(void* sp, void* pc, tcb_t *thr) {
 	thr->ctx.sp = sp;
 	/* Stack allocated, now use fake pc */
 	((uint32_t*) sp)[REG_R0] = 0x0;
+	((uint32_t*) sp)[REG_R1] = 0x0;
 	((uint32_t*) sp)[REG_R2] = 0x0;
 	((uint32_t*) sp)[REG_R3] = 0x0;
 	((uint32_t*) sp)[REG_R12] = 0x0;

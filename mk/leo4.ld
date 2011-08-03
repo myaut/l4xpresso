@@ -41,11 +41,11 @@ PROC_TABLE_BASE = 0x00000800;
 KERNEL_BASE = 0x00001000;
 USERSPACE_BASE = 0x000008000;
 
-KERNEL_STACK_SIZE    = 0x00000200;
+KERNEL_STACK_SIZE    = 0x00000400;
 
 KERNEL_STACK_ADDR = 0x10000000;
-KERNEL_DATA_ADDR = 0x100000200;
-KERNEL_KIP_ADDR = 0x10007c000;
+KERNEL_DATA_ADDR =  0x10000400;
+KERNEL_KIP_ADDR =   0x10007e00;
 
 GROUP(libcr_c.a libcr_eabihelpers.a) 
 
@@ -59,14 +59,14 @@ SECTIONS {
 		kernel_text_start = .;
 		*(.text*)
 		*(.rodata*)
+		kernel_text_end = .;
 	} > MFlash512
 	
-	kernel_text_end = .;
-	
-	.user_text:
+	.user_text 0x00008000 : ALIGN(256)
 	{
-		. = USER_SPACE_BASE
+		user_text_start = .;
 		*(.user_text*)
+		user_text_end = .;
 	} > MFlash512
 	
 	.stack :
@@ -76,12 +76,16 @@ SECTIONS {
 	} > RamLoc32
 	
 	.data :
+	AT( ADDR(.text) + SIZEOF(.text) )
 	{
 		kernel_data_start = .;
+		kip_start = .;
+		./kernel/src/start.o (kip)
+		kip_end = .;
 		/*Only kernel data*/
 		*(.data*)
 		kernel_data_end = .;
-	} >RamLoc32  AT>MFlash512
+	} >RamLoc32
 
 	/* zero initialized data */
 	.bss :
@@ -93,28 +97,22 @@ SECTIONS {
 		kernel_bss_end = .;
 	} > RamLoc32
 	
-	.user_data :
+	.user_data : 
+	AT( ADDR(.user_text) + SIZEOF(.user_text) )
+	ALIGN(256)
 	{
 		user_data_start = .;
 		*(.user_data*)
 		user_data_end = .;
-	} > RamLoc32
+	} > RamLoc32 
 	
-	.user_bss :
+	.user_bss : ALIGN(256)
 	{
 		user_bss_start = .;
 		*(.user_bss*)
 		user_bss_end = .;
-	} > RamLoc32 AT>MFlash512
-	
-	
-	.kip 0x10007e00:
-	{
-		kernel_kip_start = .;
-		*(*.kip)
-		kernel_kip_end = .;
-	} >RamLoc32  AT>MFlash512
-	
+	} > RamLoc32
+
 	.data_AHB :
 	{
 		kernel_ahb_start = .;

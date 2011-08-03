@@ -11,11 +11,11 @@ Author: myaut
 #ifndef L4_THREAD_H_
 #define L4_THREAD_H_
 
-#define __USER_TEXT
+#include <platform/link.h>
 
 #define DECLARE_THREAD(name, sub) 					\
 	void name(void) __attribute__ ((naked));		\
-	void name(void) {								\
+	void __USER_TEXT name(void) {					\
 		__asm volatile (".thumb_func");				\
 		sub();										\
 		while(1);									\

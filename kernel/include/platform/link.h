@@ -24,12 +24,10 @@ extern uint32_t kernel_data_start;
 extern uint32_t kernel_data_end;
 extern uint32_t kernel_bss_start;
 extern uint32_t kernel_bss_end;
-extern uint32_t kernel_kip_start;
-extern uint32_t kernel_kip_end;
 extern uint32_t kernel_ahb_start;
 extern uint32_t kernel_ahb_end;
 
-extern uint32_t user_text_end;
+extern uint32_t user_text_start;
 extern uint32_t user_text_end;
 extern uint32_t user_data_start;
 extern uint32_t user_data_end;

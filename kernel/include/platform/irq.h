@@ -50,7 +50,7 @@ Author: myaut
 	__ASM volatile("mov r1, %0" : : "r" (ctx->regs)); \
 	__ASM volatile("mov lr, #0xFFFFFFF9");			  \
 	__ASM volatile("mov r2, #0x0");					  \
-	__ASM volatile("stm r1, {r4-r11}");			 	  \
+	__ASM volatile("ldm r1, {r4-r11}");			 	  \
 	__ASM volatile("msr msp, r0"); 					  \
 	__ASM volatile("msr control, r2"); 				  \
 	__ASM volatile("cpsie i");						  \
@@ -61,7 +61,7 @@ Author: myaut
 	__ASM volatile("mov r1, %0" : : "r" (ctx->regs)); \
 	__ASM volatile("mov lr, #0xFFFFFFFD");			  \
 	__ASM volatile("mov r2, #0x3");					  \
-	__ASM volatile("stm r1, {r4-r11}");				  \
+	__ASM volatile("ldm r1, {r4-r11}");				  \
 	__ASM volatile("msr psp, r0"); 					  \
 	__ASM volatile("msr control, r2"); 				  \
 	__ASM volatile("cpsie i");						  \
