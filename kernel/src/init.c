@@ -13,6 +13,7 @@ Author: myaut
 
 #include <debug.h>
 
+#include <syscall.h>
 #include <ktimer.h>
 
 extern void __l4_start(void);
@@ -39,11 +40,6 @@ void ext_interrupt() {
 	}
 }
 
-void do_syscall() {
-	while(1) {
-		;
-	}
-}
 
 /*
  * Declare NVIC table
@@ -63,7 +59,7 @@ void (* const g_pfnVectors[])(void) = {
 	0,										// Reserved
 	0,										// Reserved
 	0,										// Reserved
-	do_syscall,					// SVCall handler
+	svc_handler,					// SVCall handler
 	nointerrupt,						// Debug monitor handler
 	0,										// Reserved
 	nointerrupt,							// The PendSV handler

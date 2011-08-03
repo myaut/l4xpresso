@@ -11,6 +11,7 @@ Author: myaut
 #ifndef KTABLE_H_
 #define KTABLE_H_
 
+#include <platform/armv7m.h>
 #include <platform/link.h>
 #include <types.h>
 
@@ -40,5 +41,18 @@ void* ktable_alloc(ktable_t* kt);
 void  ktable_free(ktable_t* kt, void* element);
 
 uint32_t ktable_getid(ktable_t* kt, void* element);
+
+/*
+ * Should be used as:
+ *
+ * type* el;
+ * int idx;
+ *
+ * for_each_in_ktable(el, idx, my_ktable) {
+ * 	 ...
+ * }
+ * */
+#define for_each_in_ktable(el, idx, kt)	for(el = kt->data, idx = 0; idx < kt->num; ++idx, ++el) \
+		if(((char*) BIT_ADDR(kt->bitmap))[idx << BIT_SHIFT] == 1)
 
 #endif /* KTABLE_H_ */

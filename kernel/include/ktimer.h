@@ -33,5 +33,6 @@ void ktimer_event_init();
 int ktimer_event_schedule(uint32_t ticks, ktimer_event_t* kte);
 int ktimer_event_create(uint32_t ticks, ktimer_event_handler_t handler, void* data);
 void ktimer_event_handler(void);
+uint64_t ktimer_clock();
 
 #endif /* KTIMER_H_ */

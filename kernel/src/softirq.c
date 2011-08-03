@@ -31,23 +31,33 @@ int softirq_isscheduled() {
 	return atomic_get(&softirq_scheduled_flag) == 1;
 }
 
+char* softirq_names[NR_SOFTIRQ] = {
+		"Kernel timer events",
+		"Asynchronous events",
+		"System calls",
+		"KDB enters",
+};
+
 int softirq_execute(void) {
 	uint32_t schedule = 0, executed = 0;
 	int i;
 
-	for(i = 0; i <= NR_SOFTIRQ; ++i) {
+	for(i = 0; i < NR_SOFTIRQ; ++i) {
 		if(atomic_get(&(softirq[i].schedule)) != 0
 				&& softirq[i].handler) {
 			softirq[i].handler();
+
 			executed = 1;
 			atomic_set(&(softirq[i].schedule), 0);
+
+			dbg_printf(DL_SOFTIRQ, "SOFTIRQ: executing %s\n", softirq_names[i]);
 		}
 	}
 
 	/* Must ensure that no interrupt reschedule its softirq */
 	irq_disable();
 
-	for(i = 0; i <= NR_SOFTIRQ; ++i)
+	for(i = 0; i < NR_SOFTIRQ; ++i)
 		schedule |= softirq[i].schedule;
 
 	atomic_set(&softirq_scheduled_flag, schedule);
@@ -58,20 +68,13 @@ int softirq_execute(void) {
 
 #ifdef CONFIG_KDB
 
-char* softirq_names[NR_SOFTIRQ] = {
-		"Kernel timer events",
-		"Asynchronous events",
-		"System calls",
-		"KDB enters",
-};
-
 void kdb_dump_softirq(void) {
 	int i;
 
-	dbg_printf("SOFTIRQ %s\n", atomic_get(&softirq_scheduled_flag)? "scheduled" : "not scheduled");
+	dbg_printf(DL_KDB, "SOFTIRQ %s\n", atomic_get(&softirq_scheduled_flag)? "scheduled" : "not scheduled");
 
 	for(i = 0; i < NR_SOFTIRQ; ++i) {
-		dbg_printf("%32s %s\n", softirq_names[i],
+		dbg_printf(DL_KDB, "%32s %s\n", softirq_names[i],
 				atomic_get(&(softirq[i].schedule))? "scheduled" : "not scheduled");
 	}
 }

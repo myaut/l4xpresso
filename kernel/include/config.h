@@ -17,8 +17,8 @@ Author: myaut
 
 /*Table sizes*/
 enum {
-	CONFIG_MAX_THREADS	= 64,
-	CONFIG_MAX_KT_EVENTS	= 32,
+	CONFIG_MAX_THREADS	= 32,
+	CONFIG_MAX_KT_EVENTS	= 64,
 	CONFIG_MAX_ASYNC_EVENTS	= 32
 };
 

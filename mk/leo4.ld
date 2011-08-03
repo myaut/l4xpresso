@@ -37,15 +37,14 @@ ENTRY (__l4_start)
  */
 
 
-PROC_TABLE_BASE = 0x00001000;
-KERNEL_BASE = 0x00002000;
+PROC_TABLE_BASE = 0x00000800;
+KERNEL_BASE = 0x00001000;
 USERSPACE_BASE = 0x000008000;
 
-KERNEL_STACK_SIZE    = 0x00000800;
-KERNEL_DATA_SIZE	 = 0x00002800;
+KERNEL_STACK_SIZE    = 0x00000200;
 
 KERNEL_STACK_ADDR = 0x10000000;
-KERNEL_DATA_ADDR = 0x100000800;
+KERNEL_DATA_ADDR = 0x100000200;
 KERNEL_KIP_ADDR = 0x10007c000;
 
 GROUP(libcr_c.a libcr_eabihelpers.a) 
@@ -57,11 +56,18 @@ SECTIONS {
 		. = PROC_TABLE_BASE;
 		*(.proctable*)
 		. = KERNEL_BASE;
+		kernel_text_start = .;
 		*(.text*)
 		*(.rodata*)
 	} > MFlash512
 	
 	kernel_text_end = .;
+	
+	.user_text:
+	{
+		. = USER_SPACE_BASE
+		*(.user_text*)
+	} > MFlash512
 	
 	.stack :
 	{
@@ -87,7 +93,22 @@ SECTIONS {
 		kernel_bss_end = .;
 	} > RamLoc32
 	
-	.kip 0x10007c00:
+	.user_data :
+	{
+		user_data_start = .;
+		*(.user_data*)
+		user_data_end = .;
+	} > RamLoc32
+	
+	.user_bss :
+	{
+		user_bss_start = .;
+		*(.user_bss*)
+		user_bss_end = .;
+	} > RamLoc32 AT>MFlash512
+	
+	
+	.kip 0x10007e00:
 	{
 		kernel_kip_start = .;
 		*(*.kip)
@@ -96,6 +117,8 @@ SECTIONS {
 	
 	.data_AHB :
 	{
+		kernel_ahb_start = .;
 		*(.bitmap*)
+		kernel_ahb_end = .;
 	} > RamAHB32
 }

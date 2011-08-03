@@ -28,9 +28,11 @@ Author: myaut
  * Saves {r4-r11}, msp, psp, EXC_RETURN
  * */
 #define irq_save()													\
+	__ASM volatile("cpsid i");										\
 	__ASM volatile("mov r0, %0" : : "r" (irq_window));				\
 	__ASM volatile("stm r0, {r4-r11}");								\
-	__ASM volatile("mov %0, r13" : "=r" (irq_stack_pointer) : );	\
+	__ASM volatile("mrs r0, msp");									\
+	__ASM volatile("mov %0, r0" : "=r" (irq_stack_pointer) : );		\
 	__ASM volatile("mrs r0, psp");									\
 	__ASM volatile("mov %0, r0" : "=r" (irq_user_sp) : );			\
 	__ASM volatile("mov %0, lr" : "=r" (irq_exc_return) : );
@@ -40,6 +42,7 @@ Author: myaut
 	__ASM volatile("mov r0, %0" : : "r" (irq_window));			\
 	__ASM volatile("ldm r0, {r4-r11}");							\
 	__ASM volatile("mov lr, %0" : : "r"(irq_exc_return));		\
+	__ASM volatile("cpsie i");									\
 	__ASM volatile("bx lr");
 
 #define irq_return_kernel(ctx)						  \
@@ -50,6 +53,7 @@ Author: myaut
 	__ASM volatile("stm r1, {r4-r11}");			 	  \
 	__ASM volatile("msr msp, r0"); 					  \
 	__ASM volatile("msr control, r2"); 				  \
+	__ASM volatile("cpsie i");						  \
 	__ASM volatile("bx lr");
 
 #define irq_return_user(ctx) 						  \
@@ -60,6 +64,7 @@ Author: myaut
 	__ASM volatile("stm r1, {r4-r11}");				  \
 	__ASM volatile("msr psp, r0"); 					  \
 	__ASM volatile("msr control, r2"); 				  \
+	__ASM volatile("cpsie i");						  \
 	__ASM volatile("bx lr");
 
 #define __IRQ __attribute__ ((naked))

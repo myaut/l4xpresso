@@ -25,10 +25,22 @@ Author: myaut
 
 #define DEBUG_OUTPUT_BUFFER_SIZE 64
 
+
+typedef enum {
+	DL_BASIC	= 0x8000,
+	DL_KDB 		= 0x4000,
+	DL_KTABLE	= 0x0001,
+	DL_SOFTIRQ	= 0x0002,
+	DL_THREAD	= 0x0004,
+	DL_KTIMER	= 0x0008,
+	DL_SYSCALL	= 0x0010,
+	DL_SCHEDULE	= 0x0020
+} dbg_layer_t;
+
 void dbg_putchar(uint8_t chr);
 uint8_t dbg_getchar();
 void dbg_puts(char* str);
-void dbg_printf(char* fmt, ...);
+void dbg_printf(dbg_layer_t layer, char* fmt, ...);
 
 #endif
 

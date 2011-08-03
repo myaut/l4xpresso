@@ -14,25 +14,32 @@ Author: myaut
 #include <types.h>
 #include <platform/link.h>
 
-/*
- * Process mapping
- * Statically defines table of process segments
- * in global address space (flash + sram)
- */
-struct pmap {
-	char	 name[8];
+typedef struct {
 
-	memptr_t text_base;
-	memptr_t text_size;
-	memptr_t bss_base;
-	memptr_t bss_size;
+
+} memseg_t;
+
+typedef struct {
+	char*	 name;
+
+	memptr_t base;
+	memptr_t size;
+
+	memseg_t* fpage;
+	uint32_t fpage_size;
 };
 
-const struct pmap pmap[] __BSS = {
-	/*NAME		TEXT BASE	SIZE		BSS BASE	SIZE	*/
-	{"kernel",	0x00001000,	0x00010000, 0x00011000, 0x00020000}.
-	{"test", 	0x00030000, 0x00008000, 0x00038000, 0x00080000}
-};
+/*If fpage_size = 0, memory is not allocable*/
+#define DECLARE_MEMPOOL(pool_name, start, end, fpsz) 	\
+	{													\
+		.name = pool_name,								\
+		.base = (memptr_t) (start),						\
+		.size = (memptr_t) (end - start),				\
+		.fpage = NULL,									\
+		.fpage_size = 0									\
+	}
+
+#define DECLARE_MEMPOOL_2(pool_name, prefix, fpsz) DECLARE_MEMPOOL(pool_name, &(prefix ## _start), &(prefix ## _end), fpsz)
 
 /*
  * Memory areas

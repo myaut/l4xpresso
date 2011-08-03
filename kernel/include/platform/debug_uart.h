@@ -33,7 +33,7 @@ Author: myaut
 #define LSR_TEMT	0x40
 #define LSR_RXFE	0x80
 
-#define SEND_BUFSIZE    2048
+#define SEND_BUFSIZE    1024
 #define RECV_BUFSIZE    32
 
 struct dbg_uart_t {

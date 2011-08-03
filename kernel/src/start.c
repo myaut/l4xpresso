@@ -23,6 +23,7 @@ Author: myaut
 #include <kdb.h>
 #include <ktimer.h>
 #include <softirq.h>
+#include <syscall.h>
 #include <config.h>
 
 struct kip {
@@ -45,11 +46,6 @@ struct kip kip __KIP = {
 
 extern dbg_handler_t dbg_handler;
 
-uint32_t wdt_handler(void* data) {
-	dbg_puts("WDT: handler\n");
-
-	return 65535;
-}
 
 #ifdef CONFIG_KDB
 void debug_kdb_handler(void) {
@@ -57,33 +53,33 @@ void debug_kdb_handler(void) {
 }
 #endif
 
-void dummy_thread() {
-	volatile uint32_t delay = 0;
+extern void dummy_thread(void);
+extern dbg_layer_t dbg_layer;
 
-	while(1) {
-		dbg_putchar('a');
-		for(delay = 0; delay != 100000000; ++delay);
-	}
+uint32_t wdt_handler(void* data) {
+	dbg_puts("WDT: handler\n");
+
+	return 65535;
 }
 
 int main(void) {
 	dbg_uart_init(38400);
 	dbg_puts("\n\n---------------------------------------"
 			"\nL4Xpresso hello!\n");
-	dbg_printf("Kernel data segment: %d bytes [%p:%p]\n", ((&kernel_data_end) - (&kernel_data_start)) * 4 ,
-					&kernel_data_start, &kernel_data_end);
-	dbg_printf("Kernel BSS segment: %d bytes [%p:%p]\n", ((&kernel_bss_end) - (&kernel_bss_start)) * 4,
-						&kernel_bss_start, &kernel_bss_end);
+
+	// dbg_layer = DL_BASIC | DL_KDB | DL_THREAD;
+
+	dbg_layer = 0xFFFF;
 
 	ktimer_event_init();
 	ktimer_event_create(65535,  wdt_handler, NULL);
+	syscall_init();
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
-	thread_create(&kernel_kip_start, dummy_thread, THREAD_ROOT);
-	thread_schedule(THREAD_ROOT, NULL);
+	thread_start(&kernel_kip_start, dummy_thread, thread_create(THREAD_ROOT, 0));
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will
@@ -94,7 +90,8 @@ int main(void) {
 	 * interrupt arrives (e.g. from kernel timer)*/
 	while(1) {
 		if(!softirq_execute())
-			wait_for_interrupt();
+			if(!schedule())
+				wait_for_interrupt();
 	}
 }
 

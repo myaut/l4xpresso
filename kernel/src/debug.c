@@ -13,6 +13,8 @@ Author: myaut
 #include <debug.h>
 #include <platform/debug_uart.h>
 
+dbg_layer_t dbg_layer;
+
 void dbg_puts(char* str) {
 	while(*str) {
 		if(*str == '\n')
@@ -78,7 +80,7 @@ void dbg_put_dec(const uint32_t val, const int width, const char pad) {
     } while (divisor /= 10);
 }
 
-void dbg_printf(char* fmt, ...) {
+void dbg_printf(dbg_layer_t layer, char* fmt, ...) {
 	va_list va;
 	int mode = 0;	/*0 for usual char, 1 for specifiers*/
 	int width = 0;
@@ -86,6 +88,9 @@ void dbg_printf(char* fmt, ...) {
 	int size = 16;
 
 	va_start(va, fmt);
+
+	if(!(dbg_layer & layer))
+		return;
 
 	while(*fmt) {
 		if(*fmt == '%') {
@@ -124,6 +129,7 @@ void dbg_printf(char* fmt, ...) {
 				mode = 0;
 				break;
 			case 'p':
+			case 't':
 				size = 32;
 				width = 8;
 				pad = '0';

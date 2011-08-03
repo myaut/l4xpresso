@@ -28,6 +28,7 @@ extern void kdb_dump_events(void);
 extern void kdb_dump_ktable(void);
 extern void kdb_show_ktimer(void);
 extern void kdb_dump_softirq(void);
+extern void kdb_dump_threads(void);
 
 struct kdb_t kdb_functions[] =
 {
@@ -51,16 +52,21 @@ struct kdb_t kdb_functions[] =
 		.menuentry = "show softirqs",
 		.function = kdb_dump_softirq
 	},
+	{
+		.option = 't',
+		.menuentry = "dump threads",
+		.function = kdb_dump_threads
+	},
 	/*Insert KDB functions here*/
 };
 
 void kdb_print_menu() {
 	int i;
 
-	dbg_printf("KDB menu: \n");
+	dbg_printf(DL_KDB, "KDB menu: \n");
 
 	for(i = 0; i < (sizeof(kdb_functions) / sizeof(struct kdb_t)); ++i) {
-		dbg_printf("%c: %s\n", kdb_functions[i].option, kdb_functions[i].menuentry);
+		dbg_printf(DL_KDB, "%c: %s\n", kdb_functions[i].option, kdb_functions[i].menuentry);
 	}
 }
 

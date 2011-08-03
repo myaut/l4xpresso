@@ -140,7 +140,7 @@ void dbg_putchar(uint8_t chr)
 	/*If UART is busy, try to put chr into queue until
 	 * slot is freed else write directly into UART */
 	if(!dbg_uart.ready) {
-		while(fifo_push(&(dbg_uart.tx), chr) != FIFO_OK);
+		fifo_push(&(dbg_uart.tx), chr);
 	}
 	else {
 		LPC_UART3->THR = chr;
