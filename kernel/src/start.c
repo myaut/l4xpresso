@@ -58,8 +58,11 @@ void debug_kdb_handler(void) {
 #endif
 
 void dummy_thread() {
+	volatile uint32_t delay = 0;
+
 	while(1) {
-		;
+		dbg_putchar('a');
+		for(delay = 0; delay != 100000000; ++delay);
 	}
 }
 
@@ -98,7 +101,7 @@ int main(void) {
 void __l4_start() {
 	/*Copy data segment*/
 
-	uint32_t *data_src = &kernel_text_end,
+	uint32_t *data_src =  &kernel_text_end,
 			 *data_dst =  &kernel_data_start;
 
 	while(data_dst != &kernel_data_end)

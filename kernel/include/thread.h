@@ -25,6 +25,7 @@ Author: myaut
 
 typedef struct {
 	uint32_t	sp;
+	uint32_t	regs[8];
 } context_t;
 
 struct tcb {
@@ -55,6 +56,6 @@ void thread_init();
 uint32_t thread_isscheduled();
 tcb_t* thread_create(void* sp, void* pc, const thread_tag_t tt);
 void thread_schedule(const thread_tag_t tt, tcb_t* thr);
-uint32_t thread_ctx_switch(thread_context_t where);
+context_t* thread_ctx_switch(thread_context_t where);
 
 #endif /* THREAD_H_ */

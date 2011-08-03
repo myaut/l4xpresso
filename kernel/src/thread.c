@@ -33,12 +33,21 @@ context_t kernel_ctx;
  */
 tcb_t* thread_create(void* sp, void* pc, const thread_tag_t tt) {
 	tcb_t *thr, *t;
+	int i;
 
 	thr = (tcb_t*) ktable_alloc(&thread_table);
 
+	/* Reserve 8 bytes for fake context */
+	sp -= 8;
 	thr->ctx.sp = sp;
-	/*Stack allocated, now use fake pc*/
-	((uint32_t*) sp)[-REG_PC] = pc;
+	/* Stack allocated, now use fake pc */
+	((uint32_t*) sp)[REG_R0] = 0x0;
+	((uint32_t*) sp)[REG_R2] = 0x0;
+	((uint32_t*) sp)[REG_R3] = 0x0;
+	((uint32_t*) sp)[REG_R12] = 0x0;
+	((uint32_t*) sp)[REG_LR] = 0xFFFFFFFF;
+	((uint32_t*) sp)[REG_PC] = pc;		/* +1 says to Cortex M3 that we use Thumb instructions*/
+	((uint32_t*) sp)[REG_xPSR] = 0x0;
 
 	if(tt == THREAD_ROOT) {
 		if(!root_thread) {
@@ -62,7 +71,7 @@ tcb_t* thread_create(void* sp, void* pc, const thread_tag_t tt) {
 }
 
 uint32_t thread_isscheduled() {
-	return current != NULL;
+	return (current != NULL) || (next_current != NULL);
 }
 
 void thread_schedule(const thread_tag_t tt, tcb_t* thr) {
@@ -71,32 +80,42 @@ void thread_schedule(const thread_tag_t tt, tcb_t* thr) {
 	else if(tt == THREAD_SIGMA0)
 		thr = sigma0;
 
-	if(current)
-		next_current = thr;
-	else
-		current = thr;
+	next_current = thr;
+}
+
+void save_context(context_t* ctx, uint32_t sp) {
+	int i;
+
+	ctx->sp = sp;
+	for(i = 0; i < 8; ++i)
+		ctx->regs[i] = irq_window[i];
 }
 
 /* Switch context
  * */
-uint32_t thread_ctx_switch(thread_context_t where) {
-	if(current && where == CTX_USER && next_current) {
+context_t* thread_ctx_switch(thread_context_t where) {
+	if(next_current && where == CTX_USER) {
 		/*Somebody rescheduled us, swap contexts*/
-		current->ctx.sp = irq_stack_pointer;
+		if(current) {
+			save_context(&current->ctx, irq_user_sp);
+		}
+		else {
+			save_context(&kernel_ctx, irq_stack_pointer);
+		}
 
 		/*Do switch user thread*/
 		current = next_current;
 		next_current = NULL;
 
-		return current->ctx.sp;
+		return &current->ctx;
 	}
 	else if(current && where == CTX_KERNEL) {
 		/* Switch to kernel from user space*/
-		current->ctx.sp = irq_stack_pointer;
+		save_context(&current->ctx, irq_user_sp);
 
 		current = NULL;
-		return kernel_ctx.sp;
+		return &kernel_ctx;
 	}
 
-	return irq_stack_pointer; /*nothing changed, going back*/
+	return NULL; /*nothing changed, going back*/
 }

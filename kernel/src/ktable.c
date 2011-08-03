@@ -53,8 +53,8 @@ void kdb_dump_ktable() {
 #endif
 
 void ktable_init(ktable_t* kt) {
-	char *kt_ptr = kt->bitmap,
-		 *kt_end = kt->bitmap + kt->num / 8;
+	uint32_t  *kt_ptr = (uint32_t*) kt->bitmap,
+			  *kt_end = (uint32_t*) kt->bitmap + kt->num / 8;
 
 	while(kt_ptr != kt_end)
 		*(kt_ptr++) = 0x0;
@@ -73,7 +73,7 @@ void* ktable_alloc(ktable_t* kt) {
 					kt->data + (i * kt->size));
 
 			*bptr = 1;
-			return kt->data + (i * kt->size);
+			return (void*) kt->data + (i * kt->size);
 		}
 
 		bptr += 1 << BIT_SHIFT;

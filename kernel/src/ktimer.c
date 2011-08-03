@@ -60,10 +60,7 @@ int ktimer_is_enabled() {
 	return ktimer_enabled == 1;
 }
 
-void ktimer_handler() __IRQ;
-void ktimer_handler() {
-	softirq_save_irq();
-
+void __ktimer_handler() {
 	++ktimer_now;
 
 	if(ktimer_enabled && ktimer_delta > 0) {
@@ -76,9 +73,9 @@ void ktimer_handler() {
 			softirq_schedule(KTE_SOFTIRQ);
 		}
 	}
-
-	softirq_return_irq();
 }
+
+IRQ_HANDLER(ktimer_handler, __ktimer_handler);
 
 void kdb_show_ktimer() {
 	dbg_printf("Now is %ld\n", ktimer_now);

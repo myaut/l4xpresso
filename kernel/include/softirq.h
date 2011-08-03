@@ -40,28 +40,4 @@ void softirq_schedule(softirq_type_t type);
 int softirq_isscheduled();
 int softirq_execute(void);
 
-/*
- * Context switching is doing on interrupt return
- * We check if nobody schedules actions in kernel (SOFTIRQs)
- * Then do context switch
- *
- * Idea is that on interrupt we'll save all registers under
- * irq_stack_pointer than on return we copy registers to
- * thread's structure or to kernel_ctx
- * */
-
-#define softirq_save_irq() irq_save()
-#define softirq_return_irq() 				\
-	if(!softirq_isscheduled() && 			\
-		thread_isscheduled()) {				\
-		uint32_t sp;						\
-		sp = thread_ctx_switch(CTX_USER);	\
-		irq_return_user(sp);				\
-	}										\
-	else {									\
-		uint32_t sp; 						\
-		sp = thread_ctx_switch(CTX_KERNEL); \
-		irq_return_kernel(sp);				\
-	}
-
 #endif /* SOFTIRQ_H_ */

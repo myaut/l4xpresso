@@ -23,6 +23,16 @@ void nointerrupt() {
 	}
 }
 
+void hard_fault_interrupt() {
+	dbg_panic_puts("Kernel panic: Hard fault. Restarting\n");
+	__l4_start();
+}
+
+void nmi_interrupt() {
+	dbg_panic_puts("Kernel panic: NMI. Restarting\n");
+	__l4_start();
+}
+
 void ext_interrupt() {
 	while(1) {
 		;
@@ -44,8 +54,8 @@ void (* const g_pfnVectors[])(void) = {
 	// Core Level - CM3
 	&kernel_stack_addr, 					// The initial stack pointer
 	__l4_start,							// The reset handler
-	nointerrupt,						// The NMI handler
-	nointerrupt,						// The hard fault handler
+	nmi_interrupt,						// The NMI handler
+	hard_fault_interrupt,						// The hard fault handler
 	nointerrupt,						// The MPU fault handler
 	nointerrupt,						// The bus fault handler
 	nointerrupt,						// The usage fault handler

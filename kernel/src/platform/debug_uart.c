@@ -157,3 +157,14 @@ uint8_t dbg_getchar() {
 		return chr;
 
 }
+
+void dbg_panic_puts(uint8_t* str)
+{
+	/* In panic condition we can be in interrupt context or
+	 * not, so will write symbols synchronously */
+	NVIC_DisableIRQ(UART3_IRQn);
+	while(*str++) {
+		while(!(LPC_UART3->IIR & 0x2));
+		LPC_UART3->THR = *str;
+	}
+}

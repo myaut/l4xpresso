@@ -12,6 +12,7 @@ Author: myaut
 #include <platform/microops.h>
 #include <softirq.h>
 #include <config.h>
+#include <debug.h>
 
 static softirq_t softirq[NR_SOFTIRQ];
 static atomic_t softirq_scheduled_flag = 0;

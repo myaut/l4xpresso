@@ -25,15 +25,6 @@ Author: myaut
 #define wait_for_interrupt() __ASM volatile ("wfi")
 
 enum register_stack_t {
-	/*Saved in irq_save*/
-	REG_R4,
-	REG_R5,
-	REG_R6,
-	REG_R7,
-	REG_R8,
-	REG_R9,
-	REG_R10,
-	REG_R11,
 	/*Saved by hardware*/
 	REG_R0,
 	REG_R1,
