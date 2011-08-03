@@ -42,6 +42,14 @@ memptr_t addr_align(memptr_t addr, uint32_t size) {
 		return (addr & ~(size - 1));
 }
 
+int fp_addr_log2(memptr_t addr) {
+	int shift = 0;
+
+	while ((addr <<= 1) != 0) ++shift;
+
+	return 31 - shift;
+}
+
 /*
  * NOTE: as and fpage chain couldn't overlap
  * if they do, use insert_fpage_to_as which checks every fpage
@@ -77,7 +85,7 @@ void insert_fpage_to_as(as_t* as, fpage_t* fpage) {
 	insert_fpage_chain_to_as(as, fpage, fpage);
 }
 
-fpage_t* create_fpage(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
+fpage_t* create_fpage(mempool_id_t mpid, as_t* as, memptr_t base, size_t shift) {
 	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
 
 	fpage->as = as;
@@ -88,19 +96,16 @@ fpage_t* create_fpage(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size)
 	fpage->fpage.rwx = MP_USER_PERM(memmap[mpid].flags);
 
 	fpage->fpage.base = base;
-	fpage->fpage.size = size;
+	fpage->fpage.shift = shift;
 
 	if(memmap[mpid].flags & MP_MAP_ALWAYS)
 		fpage->fpage.flags |= FPAGE_ALWAYS;
-
-	dbg_printf(DL_MEMORY, "MEM: fpage %s [b:%p, sz:%p] as %p\n", memmap[mpid].name, fpage->fpage.base,
-				(1 << fpage->fpage.size), as);
 
 	return fpage;
 }
 
 int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
-	int i, shift;
+	int i, shift, bshift, sshift;
 	fpage_t *fpage = NULL, *first = NULL, *last = NULL;
 
 	/*if mpid is unknown, search using base addr*/
@@ -133,31 +138,61 @@ int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
 		break;
 	}
 
+	if(size == 0)
+		return -2;
+
 	/* Create chain of fpages
 	 *
 	 * MPU in Cortex-M3 support only regions of 2 ^ n size, so if we want create page of 96 bytes for example,
 	 * we should split it into smaller ones
 	 * */
 
-	for(shift = CONFIG_LARGEST_FPAGE_SHIFT; shift >= CONFIG_LEAST_FPAGE_SHIFT; --shift) {
-		while(size > (1 << shift)) {
-			if(!first) {
-				first = create_fpage(mpid, as, base, size);
-				fpage = first;
-			}
-			else {
-				fpage->as_next = create_fpage(mpid, as, base, size);
-				last = fpage;
-				fpage = fpage->as_next;
-			}
-			size -= (1 << shift);
-			base += (1 << shift);
+	dbg_printf(DL_MEMORY, "MEM: fpage chain %s [b:%p, sz:%p] as %p\n", memmap[mpid].name, base, size, as);
+
+	while(size) {
+		/* Select lease of log2(base),log2(size). Needed to make regions with correct align*/
+		bshift = fp_addr_log2(base);
+		sshift = fp_addr_log2(size);
+
+		shift = ((1 << bshift) > size)? sshift : bshift;
+
+		if(!first) {
+			first = create_fpage(mpid, as, base, shift);
+			fpage = first;
 		}
+		else {
+			fpage->as_next = create_fpage(mpid, as, base, shift);
+			last = fpage;
+			fpage = fpage->as_next;
+		}
+		size -= (1 << shift);
+		base += (1 << shift);
 	}
 
-	insert_fpage_chain_to_as(as, first, last);
+	if(last)
+		insert_fpage_chain_to_as(as, first, last);
+	else
+		insert_fpage_to_as(as, first);
 
 	return 0;
+}
+
+/*
+ * Should be platform functions
+ */
+void mpu_setup_region(int n, fpage_t* fp) {
+	static uint32_t* mpu_base = (uint32_t*) 0xE000ED9C;
+	static uint32_t* mpu_attr = (uint32_t*) 0xE000EDA0;
+
+	*mpu_base = (fp->fpage.base & 0xFFFFFFE0) | 0x10 | (n & 0xF);
+	*mpu_attr = ((memmap[fp->fpage.mpid].flags & MP_UX)? 0 : (1 << 28)) |	/*XN bit*/
+			0x3  << 24 /*Full access*/ | ((fp->fpage.shift - 1) << 1) /*Region*/ | 1 /*Enable*/;
+}
+
+void mpu_enable(mpu_state_t i) {
+	static uint32_t* mpu_ctrl = (uint32_t*) 0xE000ED94;
+
+	*mpu_ctrl = i;
 }
 
 void as_setup_mpu(as_t* as) {
@@ -175,7 +210,7 @@ void as_setup_mpu(as_t* as) {
 	 * When memfault occurs, it sets lru flag in fpage flags
 	 * */
 
-	while(as != NULL) {
+	while(fp != NULL) {
 		if(fp->fpage.flags & FPAGE_ALWAYS) {
 			if(k < 8)
 				mpu[k++] = fp;
@@ -201,8 +236,12 @@ void as_setup_mpu(as_t* as) {
 		fp = fp->as_next;
 	}
 
-	for(i = 0; i < 8; ++i) {
+	for(i = 0; i < k; ++i) {
+		mpu_setup_region(i, mpu[i]);
+	}
 
+	for(i = 7; i > j; --i) {
+		mpu_setup_region(i, mpu[i]);
 	}
 }
 
@@ -261,6 +300,30 @@ void kdb_dump_mempool() {
 	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
 		dbg_printf(DL_KDB, "%8s %8d [%p:%p] %10s\n", memmap[i].name, (memmap[i].end - memmap[i].start),
 					memmap[i].start, memmap[i].end, kdb_mempool_prop(&(memmap[i])));
+	}
+}
+
+void kdb_dump_as() {
+	int idx = 0, nl = 0;
+	as_t* as = NULL;
+	fpage_t* fpage = NULL;
+
+	for_each_in_ktable(as, idx, &as_table) {
+		fpage = as->first;
+		dbg_printf(DL_KDB, "Address Space %p\n", as->as_spaceid);
+
+		while(fpage) {
+			dbg_printf(DL_MEMORY, "MEM: fpage %s [b:%p, sz:2**%d]\n", memmap[fpage->fpage.mpid].name,
+						fpage->fpage.base, fpage->fpage.shift);
+			fpage = fpage->as_next;
+			++nl;
+
+			if(nl == 12) {
+				dbg_puts("Press any key...\n");
+				while(dbg_getchar() == 0);
+				nl = 0;
+			}
+		}
 	}
 }
 

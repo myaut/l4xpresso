@@ -46,4 +46,7 @@ extern void kernel_stack_addr(void);
 #define __USER_DATA		__attribute__ ((section(".user_data")))
 #define __USER_BSS		__attribute__ ((section(".user_bss")))
 
+#define __PACKED		__attribute__ ((packed))
+
+
 #endif /* LINK_H_ */

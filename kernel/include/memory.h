@@ -49,7 +49,7 @@ struct fpage {
 			uint32_t base;
 			uint32_t mpid : 6;
 			uint32_t flags : 6;
-			uint32_t size : 16;
+			uint32_t shift : 16;
 			uint32_t rwx : 4;
 		} fpage;
 		uint32_t raw[2];
@@ -120,6 +120,11 @@ typedef enum {
 
 #define DECLARE_MEMPOOL_2(name, prefix, flags) DECLARE_MEMPOOL(name, &(prefix ## _start), &(prefix ## _end), flags)
 
+typedef enum {
+	MPU_DISABLED,
+	MPU_ENABLED
+} mpu_state_t;
+
 void memory_init();
 
 as_t* create_as(uint32_t as_spaceid);
@@ -128,5 +133,7 @@ int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size);
 void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last);
 void insert_fpage_to_as(as_t* as, fpage_t* fpage);
 int map_fpage(as_t* as, fpage_t* fpage, map_action_t action);
+void as_setup_mpu(as_t* as);
+void mpu_enable(mpu_state_t i);
 
 #endif /* MEMORY_H_ */

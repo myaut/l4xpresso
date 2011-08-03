@@ -33,7 +33,7 @@ context_t kernel_ctx;
 /**
  * Create thread
  */
-tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid) {
+tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid, as_t* as) {
 	tcb_t *thr, *t;
 
 	thr = (tcb_t*) ktable_alloc(&thread_table);
@@ -46,11 +46,19 @@ tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid) {
 		else {
 			return NULL;
 		}
+
+		if(!sigma0)
+			sigma0 = thr;
+
+		thr->as = as;
+
 		thr->t_globalid = tt << 14;
 		thr->t_localid = 0;
 	}
 	else if(tt == THREAD_SIGMA0 && !sigma0) {
 		sigma0 = thr;
+
+		thr->as = as;
 		thr->t_globalid = tt << 14;
 		thr->t_localid = 0;
 	}
@@ -62,6 +70,7 @@ tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid) {
 
 		thr->t_globalid = globalid;
 		thr->t_localid = t->t_localid + (1 << 6);
+		thr->as = current->as;
 	}
 
 	thr->state = T_FREE;
@@ -128,6 +137,9 @@ context_t* thread_ctx_switch(thread_context_t where) {
 		current = next_current;
 		next_current = NULL;
 
+		as_setup_mpu(current->as);
+		mpu_enable(MPU_ENABLED);
+
 		return &current->ctx;
 	}
 	else if(current && where == CTX_KERNEL) {
@@ -136,6 +148,7 @@ context_t* thread_ctx_switch(thread_context_t where) {
 
 		dbg_printf(DL_THREAD, "TCB: switch %p -> kernel\n", current);
 
+		mpu_enable(MPU_DISABLED);
 		current = NULL;
 		return &kernel_ctx;
 	}

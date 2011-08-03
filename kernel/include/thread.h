@@ -13,6 +13,7 @@ Author: myaut
 
 #include <types.h>
 #include <ktable.h>
+#include <memory.h>
 
 typedef enum {
 	THREAD_KERNEL,
@@ -41,6 +42,7 @@ struct tcb {
 	thread_state_t state;
 
 	context_t ctx;
+	as_t* as;
 
 	struct tcb* t_sibling;
 	struct tcb* t_parent;
@@ -56,7 +58,7 @@ typedef enum  { CTX_KERNEL, CTX_USER } thread_context_t;
 
 void thread_init();
 uint32_t thread_isscheduled();
-tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid);
+tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid, as_t* as);
 void thread_start(void* sp, void* pc, tcb_t *thr);
 void thread_schedule(const thread_tag_t tt, tcb_t* thr);
 context_t* thread_ctx_switch(thread_context_t where);

@@ -78,13 +78,14 @@ int main(void) {
 	ktimer_event_init();
 	ktimer_event_create(65535,  wdt_handler, NULL);
 	syscall_init();
+	thread_init();
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
 	user_as = create_as(0);
-	thread_start(0x10007fc0, dummy_thread, thread_create(THREAD_ROOT, 0));
+	thread_start(0x10007fc0, dummy_thread, thread_create(THREAD_ROOT, 0, user_as));
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will

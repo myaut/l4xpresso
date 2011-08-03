@@ -14,7 +14,7 @@ Author: myaut
 #include <debug.h>
 #include <platform/armv7m.h>
 
-
+#ifdef CONFIG_KDB
 
 typedef void (*kdb_function_t)(void);
 
@@ -30,6 +30,7 @@ extern void kdb_show_ktimer(void);
 extern void kdb_dump_softirq(void);
 extern void kdb_dump_threads(void);
 extern void kdb_dump_mempool(void);
+extern void kdb_dump_as(void);
 
 struct kdb_t kdb_functions[] =
 {
@@ -63,6 +64,11 @@ struct kdb_t kdb_functions[] =
 		.menuentry = "dump memory pools",
 		.function = kdb_dump_mempool
 	},
+	{
+		.option = 'a',
+		.menuentry = "dump address spaces",
+		.function = kdb_dump_as
+	},
 	/*Insert KDB functions here*/
 };
 
@@ -80,7 +86,7 @@ void kdb_print_menu() {
 int kdb_handler(char c) {
 	int i;
 
-	for(i = 0; i <= sizeof(kdb_functions); ++i) {
+	for(i = 0; i <= (sizeof(kdb_functions) / sizeof(struct kdb_t)); ++i) {
 		if(c == kdb_functions[i].option) {
 			kdb_functions[i].function();
 			return 0;
@@ -96,3 +102,4 @@ int kdb_handler(char c) {
 }
 
 
+#endif

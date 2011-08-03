@@ -52,7 +52,7 @@ uint32_t ktable_getid(ktable_t* kt, void* element);
  * 	 ...
  * }
  * */
-#define for_each_in_ktable(el, idx, kt)	for(el = kt->data, idx = 0; idx < kt->num; ++idx, ++el) \
-		if(((char*) BIT_ADDR(kt->bitmap))[idx << BIT_SHIFT] == 1)
+#define for_each_in_ktable(el, idx, kt)	for(el = (kt)->data, idx = 0; idx < (kt)->num; ++idx, ++el) \
+		if(((char*) BIT_ADDR((kt)->bitmap))[idx << BIT_SHIFT] == 1)
 
 #endif /* KTABLE_H_ */

@@ -13,7 +13,6 @@ Author: myaut
 uint32_t fifo_init(struct fifo_t* queue, uint8_t* addr, uint32_t size) {
 	queue->q_top = 0;
 	queue->q_end = 0;
-	queue->q_length = 0;
 	queue->q_size = size;
 	queue->q_data = addr;
 
@@ -21,11 +20,10 @@ uint32_t fifo_init(struct fifo_t* queue, uint8_t* addr, uint32_t size) {
 }
 
 uint32_t fifo_push(struct fifo_t* queue, uint8_t el) {
-	if(queue->q_length == (queue->q_size - 1)) {
+	if(fifo_length(queue) == queue->q_size) {
 		return FIFO_OVERFLOW;
 	}
 
-	++queue->q_length;
 	++queue->q_end;
 
 	if(queue->q_end == (queue->q_size - 1))
@@ -37,7 +35,7 @@ uint32_t fifo_push(struct fifo_t* queue, uint8_t el) {
 }
 
 uint32_t fifo_state(struct fifo_t* queue) {
-	if(queue->q_length == 0) {
+	if(fifo_length(queue) == 0) {
 		return FIFO_EMPTY;
 	}
 
@@ -46,11 +44,10 @@ uint32_t fifo_state(struct fifo_t* queue) {
 
 uint32_t fifo_pop(struct fifo_t* queue, uint8_t* el) {
 	//Очередь пуста
-	if(queue->q_length == 0) {
+	if(fifo_length(queue) == 0) {
 		return FIFO_EMPTY;
 	}
 
-	--queue->q_length;
 	++queue->q_top;
 
 	if(queue->q_top == (queue->q_size - 1))
@@ -64,5 +61,5 @@ uint32_t fifo_pop(struct fifo_t* queue, uint8_t* el) {
 /*Функция fifo_length возвращает длину очереди*/
 uint32_t fifo_length(struct fifo_t* queue) {
 	return (queue->q_end > queue->q_top)? (queue->q_end - queue->q_top - 1)
-			: (queue->q_end - queue->q_top + 255);
+			: (queue->q_end - queue->q_top + queue->q_size - 1);
 }

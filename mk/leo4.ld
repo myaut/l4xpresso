@@ -36,10 +36,8 @@ ENTRY (__l4_start)
  *
  */
 
-
-PROC_TABLE_BASE = 0x00000800;
-KERNEL_BASE = 0x00001000;
-USERSPACE_BASE = 0x000008000;
+KERNEL_BASE = 0x00000800;
+USERSPACE_BASE = 0x00000C000;
 
 KERNEL_STACK_SIZE    = 0x00000400;
 
@@ -53,8 +51,6 @@ SECTIONS {
 	.text 0x00000000:
 	{
 		KEEP(*(.isr_vector))
-		. = PROC_TABLE_BASE;
-		*(.proctable*)
 		. = KERNEL_BASE;
 		kernel_text_start = .;
 		*(.text*)
@@ -62,7 +58,8 @@ SECTIONS {
 		kernel_text_end = .;
 	} > MFlash512
 	
-	.user_text 0x00008000 : ALIGN(256)
+	.user_text 0x0000c000 : 
+	ALIGN (256)
 	{
 		user_text_start = .;
 		*(.user_text*)
@@ -88,7 +85,7 @@ SECTIONS {
 	} >RamLoc32
 
 	/* zero initialized data */
-	.bss :
+	.bss (NOLOAD) :
 	{
 		kernel_bss_start = .;
 		*(.bss*)
@@ -99,21 +96,22 @@ SECTIONS {
 	
 	.user_data : 
 	AT( ADDR(.user_text) + SIZEOF(.user_text) )
-	ALIGN(256)
+	ALIGN (256)
 	{
 		user_data_start = .;
 		*(.user_data*)
 		user_data_end = .;
 	} > RamLoc32 
 	
-	.user_bss : ALIGN(256)
+	.user_bss (NOLOAD) :
+	ALIGN (256)
 	{
 		user_bss_start = .;
 		*(.user_bss*)
 		user_bss_end = .;
 	} > RamLoc32
 
-	.data_AHB :
+	.data_AHB (NOLOAD) :
 	{
 		kernel_ahb_start = .;
 		*(.bitmap*)
