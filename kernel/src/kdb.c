@@ -10,30 +10,72 @@ Author: myaut
 
 #include <types.h>
 #include <kdb.h>
-#include <ktable.h>
+#include <config.h>
 #include <debug.h>
 #include <platform/armv7m.h>
 
-#define KTABLE_NUM 16
-static ktable_t* kdb_ktables[KTABLE_NUM];
-static uint8_t	 kdb_ktable_cnt;
+
+
+typedef void (*kdb_function_t)(void);
+
+struct kdb_t {
+	char option;
+	char* menuentry;
+	kdb_function_t function;
+};
 
 extern void kdb_dump_events(void);
-extern void kdb_show_ktimer();
+extern void kdb_dump_ktable(void);
+extern void kdb_show_ktimer(void);
+extern void kdb_dump_softirq(void);
+
+struct kdb_t kdb_functions[] =
+{
+	{
+		.option = 'K',
+		.menuentry = "print kernel tables",
+		.function = kdb_dump_ktable
+	},
+	{
+		.option = 'e',
+		.menuentry = "dump ktimer events",
+		.function = kdb_dump_events
+	},
+	{
+		.option = 'n',
+		.menuentry = "show timer (now)",
+		.function = kdb_show_ktimer
+	},
+	{
+		.option = 's',
+		.menuentry = "show softirqs",
+		.function = kdb_dump_softirq
+	},
+	/*Insert KDB functions here*/
+};
+
+void kdb_print_menu() {
+	int i;
+
+	dbg_printf("KDB menu: \n");
+
+	for(i = 0; i < (sizeof(kdb_functions) / sizeof(struct kdb_t)); ++i) {
+		dbg_printf("%c: %s\n", kdb_functions[i].option, kdb_functions[i].menuentry);
+	}
+}
+
 
 int kdb_handler(char c) {
-	switch(c) {
-	case 'K':
-		/*Dump kernel tables*/
-		kdb_dump_ktable();
-		return 0;
-	case 'e':
-		kdb_dump_events();
-		return 0;
-	case 'n':
-		kdb_show_ktimer();
-		return 0;
-	case '?':
+	int i;
+
+	for(i = 0; i <= sizeof(kdb_functions); ++i) {
+		if(c == kdb_functions[i].option) {
+			kdb_functions[i].function();
+			return 0;
+		}
+	}
+
+	if(c == '?') {
 		kdb_print_menu();
 		return 0;
 	}
@@ -41,37 +83,4 @@ int kdb_handler(char c) {
 	return 1;
 }
 
-void kdb_register_ktable(ktable_t* kt) {
-	if(kdb_ktable_cnt < (KTABLE_NUM - 1)) {
-		kdb_ktables[kdb_ktable_cnt++] = kt;
-	}
-}
 
-void kdb_dump_ktable() {
-	int i = 0, j;
-	ktable_t* kt;
-
-	for(; i < kdb_ktable_cnt; ++i) {
-		kt = kdb_ktables[i];
-
-		dbg_printf("\nKT: %s\nbitmap:%p, data:%p, num: %d size: %d\n",
-			kt->tname, kt->bitmap, kt->data, kt->num, kt->size);
-		/*Dump bitmap*/
-		for(j = 0; j < kt->num; ++j) {
-			if(j % 64 == 0)
-				dbg_printf("%5d: ", j);
-
-			dbg_putchar((*(BIT_BITADDR(kt->bitmap, j)))? 'X': '-');
-
-			if((j + 1) % 64 == 0)
-				dbg_puts("\n");
-		}
-	}
-}
-
-void kdb_print_menu() {
-	dbg_printf(	"L4Xpresso KDB Menu:\n"
-				" K - print kernel tables\n"
-				" e - dump ktimer events\n"
-				" n - show timer (now)\n");
-}

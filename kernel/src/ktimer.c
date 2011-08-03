@@ -13,21 +13,31 @@ Author: myaut
 #include <debug.h>
 #include <ktimer.h>
 #include <ktable.h>
+#include <softirq.h>
+#include <platform/armv7m.h>
+#include <platform/microops.h>
+#include <platform/irq.h>
+#include <config.h>
 
 uint64_t ktimer_now;
 
-DECLARE_KTABLE(ktimer_event_t, ktimer_event_table, 256);
+DECLARE_KTABLE(ktimer_event_t, ktimer_event_table, CONFIG_MAX_KT_EVENTS);
 
 /*Next chain of events which will be executed*/
 ktimer_event_t* event_queue = NULL;
 
 //------------------------------------------------
+
+/* Simple ktimer implementation
+ *
+ * */
+
 static uint32_t ktimer_enabled = 0;
-static long long ktimer_delta =   0;
+static uint32_t ktimer_delta =   0;
 static long long ktimer_time =   0;
 
 void ktimer_init() {
-	SysTick->LOAD	= SYSTICK_CLOCK - 12;
+	SysTick->LOAD	= CONFIG_KTIMER_HEARTBEAT - 12;
 	SysTick->VAL	= 0;
 	SysTick->CTRL 	= 0x7;
 }
@@ -41,8 +51,8 @@ void ktimer_disable() {
 void ktimer_enable(uint32_t delta) {
 	if(!ktimer_enabled) {
 		ktimer_delta = delta;
-		ktimer_enabled = 1;
 		ktimer_time = 0;
+		ktimer_enabled = 1;
 	}
 }
 
@@ -50,7 +60,10 @@ int ktimer_is_enabled() {
 	return ktimer_enabled == 1;
 }
 
-void ktimer_handler(void) {
+void ktimer_handler() __IRQ;
+void ktimer_handler() {
+	softirq_save_irq();
+
 	++ktimer_now;
 
 	if(ktimer_enabled && ktimer_delta > 0) {
@@ -60,9 +73,11 @@ void ktimer_handler(void) {
 		if(ktimer_delta == 0) {
 			ktimer_enabled = 0;
 			ktimer_time = ktimer_delta = 0;
-			ktimer_event_handler();
+			softirq_schedule(KTE_SOFTIRQ);
 		}
 	}
+
+	softirq_return_irq();
 }
 
 void kdb_show_ktimer() {
@@ -150,7 +165,7 @@ int ktimer_event_schedule(uint32_t ticks, ktimer_event_t* kte) {
 		}
 
 		/*Chaining events*/
-		if(delta < KTIMER_MINTICKS)
+		if(delta < CONFIG_KTIMER_MINTICKS)
 			delta = 0;
 
 		kte->next = next_event;
@@ -238,6 +253,7 @@ void ktimer_event_handler(void) {
 void ktimer_event_init(void) {
 	ktable_init(&ktimer_event_table);
 	ktimer_init();
+	softirq_register(KTE_SOFTIRQ, ktimer_event_handler);
 }
 
 

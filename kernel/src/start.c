@@ -22,6 +22,8 @@ Author: myaut
 #include <debug.h>
 #include <kdb.h>
 #include <ktimer.h>
+#include <softirq.h>
+#include <config.h>
 
 struct kip {
 	uint32_t	kernel_id;
@@ -43,44 +45,61 @@ struct kip kip __KIP = {
 
 extern dbg_handler_t dbg_handler;
 
-uint32_t test_handler1(ktimer_event_t* kte) {
-	dbg_puts("Hello from Siberia!\n");
+uint32_t wdt_handler(void* data) {
+	dbg_puts("WDT: handler\n");
 
-	return 0;
+	return 65535;
 }
 
-uint32_t test_handler2(ktimer_event_t* kte) {
-	dbg_puts("Hello from Yamayka!\n");
-
-	return 163840;
+#ifdef CONFIG_KDB
+void debug_kdb_handler(void) {
+	kdb_handler(dbg_getchar());
 }
+#endif
 
-uint32_t test_handler3(ktimer_event_t* kte) {
-	dbg_puts("Hello from Omikron 8!\n");
-
-	return 81920;
+void dummy_thread() {
+	while(1) {
+		;
+	}
 }
 
 int main(void) {
 	dbg_uart_init(38400);
 	dbg_puts("\n\n---------------------------------------"
 			"\nL4Xpresso hello!\n");
+	dbg_printf("Kernel data segment: %d bytes [%p:%p]\n", ((&kernel_data_end) - (&kernel_data_start)) * 4 ,
+					&kernel_data_start, &kernel_data_end);
+	dbg_printf("Kernel BSS segment: %d bytes [%p:%p]\n", ((&kernel_bss_end) - (&kernel_bss_start)) * 4,
+						&kernel_bss_start, &kernel_bss_end);
 
 	ktimer_event_init();
-	ktimer_event_create(65535,  test_handler1, NULL);
-	ktimer_event_create(163840, test_handler2, NULL);
-	ktimer_event_create(128000, test_handler3, NULL);
+	ktimer_event_create(65535,  wdt_handler, NULL);
 
+#	ifdef CONFIG_KDB
+	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
+#	endif
+
+	thread_create(&kernel_kip_start, dummy_thread, THREAD_ROOT);
+	thread_schedule(THREAD_ROOT, NULL);
+
+	/* Here is main kernel thread
+	 * we will fall here if somebody will
+	 * schedule softirq and call softirq_return_irq
+	 * so we will do context switching
+	 *
+	 * If nothing to execute than sleep until next
+	 * interrupt arrives (e.g. from kernel timer)*/
 	while(1) {
-		kdb_handler(dbg_getchar());
+		if(!softirq_execute())
+			wait_for_interrupt();
 	}
 }
 
 void __l4_start() {
 	/*Copy data segment*/
 
-	uint8_t *data_src = (uint8_t*) &kernel_text_end,
-			*data_dst = (uint8_t*) &kernel_data_start;
+	uint32_t *data_src = &kernel_text_end,
+			 *data_dst =  &kernel_data_start;
 
 	while(data_dst != &kernel_data_end)
 		*data_dst++ = *data_src++;
@@ -93,7 +112,7 @@ void __l4_start() {
 		*data_dst++ = *data_src++;
 	}
 
-    __asm("   ldr     r0, =kernel_bss_start\n"
+    __asm("    ldr     r0, =kernel_bss_start\n"
           "    ldr     r1, =kernel_bss_end\n"
           "    mov     r2, #0\n"
           "    .thumb_func\n"

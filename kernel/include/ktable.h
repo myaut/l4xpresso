@@ -39,5 +39,6 @@ void  ktable_init(ktable_t* kt);
 void* ktable_alloc(ktable_t* kt);
 void  ktable_free(ktable_t* kt, void* element);
 
+uint32_t ktable_getid(ktable_t* kt, void* element);
 
 #endif /* KTABLE_H_ */

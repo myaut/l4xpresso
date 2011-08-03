@@ -9,13 +9,13 @@ Author: myaut
 */
 
 #include <platform/debug_uart.h>
+#include <config.h>
 #include <fifo.h>
+#include <softirq.h>
 
 static struct dbg_uart_t dbg_uart;
 static uint8_t dbg_uart_tx_buffer[SEND_BUFSIZE];
 static uint8_t dbg_uart_rx_buffer[RECV_BUFSIZE];
-
-dbg_handler_t dbg_handler;
 
 void dbg_uart_init(uint32_t baudrate)
 {
@@ -64,13 +64,12 @@ void dbg_uart_init(uint32_t baudrate)
 static void dbg_uart_recv() {
 	uint8_t chr = LPC_UART3->RBR;
 
-	if(dbg_handler) {
-		dbg_handler(chr);
-	}
-	else {
-		/*Put symbol on queue*/
-		fifo_push(&(dbg_uart.rx), chr);
-	}
+	/*Put symbol on queue*/
+	fifo_push(&(dbg_uart.rx), chr);
+
+#ifdef CONFIG_KDB
+	softirq_schedule(KDB_SOFTIRQ);
+#endif
 }
 
 void dbg_uart_send(int avail) {

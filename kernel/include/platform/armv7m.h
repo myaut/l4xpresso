@@ -14,23 +14,36 @@ Author: myaut
 #include <types.h>
 
 #define __ASM 	__asm
-#define	 __INLINE inline
-
-/*
-void __set_msp(uint32_t top) __attribute__( ( naked ) );
-void __set_msp(uint32_t top)
-{
-  __ASM volatile ("MSR msp, %0\n\t"
-                   "BX  lr     \n\t" : : "r" (top) );
-}
-
-void __syscall() {
-	__ASM volatile ("SVC #0\n\t");
-}*/
+#define	__INLINE inline
 
 /*Bitmap opetations*/
 #define BIT_ADDR(addr) (0x22000000 + ((((ptr_t) addr) & 0xFFFFF) << 5))
 #define BIT_BITADDR(addr, bitnum) ((uint8_t*) (BIT_ADDR(addr) + (bitnum << 2)))
 #define BIT_SHIFT	 2
+
+/*Wait for interrupt*/
+#define wait_for_interrupt() __ASM volatile ("wfi")
+
+enum register_stack_t {
+	/*Saved in irq_save*/
+	REG_R4,
+	REG_R5,
+	REG_R6,
+	REG_R7,
+	REG_R8,
+	REG_R9,
+	REG_R10,
+	REG_R11,
+	/*Saved by hardware*/
+	REG_R0,
+	REG_R1,
+	REG_R2,
+	REG_R3,
+	REG_R12,
+	REG_LR,
+	REG_PC,
+	REG_xPSR
+};
+
 
 #endif /* ARMV7M_H_ */
