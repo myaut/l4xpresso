@@ -1,12 +1,12 @@
 /*
-L4Xpresso
-Copyright (c) 2011, Sergey Klyaus
+ L4Xpresso
+ Copyright (c) 2011, Sergey Klyaus
 
-File: /leo4-mcu/kernel/src/thread.c
-Author: myaut
+ File: /leo4-mcu/kernel/src/thread.c
+ Author: myaut
 
-@LICENSE
-*/
+ @LICENSE
+ */
 
 #include <thread.h>
 #include <ktable.h>
@@ -15,74 +15,195 @@ Author: myaut
 #include <platform/irq.h>
 #include <platform/armv7m.h>
 
-DECLARE_KTABLE(tcb_t, thread_table, CONFIG_MAX_THREADS);
+/*
+ * Main thread dispatcher
+ *
+ * Each thread has it's own Thread Control Block (struct tcb_t) and addressed by
+ * it's global id. However, globalid are very wasteful - we reserve 3 global ids for
+ * in-kernel purposes (IDLE, KERNEL and ROOT), 240 for NVIC's interrupt thread
+ * and 256 for user threads, which gives at least 4  * 512 = 2Kb.
+ *
+ * On the other hand, we don't need so much threads, so we use thread_map -
+ * array of pointers to tcb_t sorted by global id and ktable of tcb_t
+ * For each search operation we use binary search
+ *
+ * See also Abi Nourai, A Physically addressed L4 Kernel
+ *
+ * Also dispatcher is responsible for switching contexts (but not scheduling)
+ */
 
-volatile tcb_t* current;			// Currently on CPU
-volatile tcb_t* next_current;		// Next on CPU
+DECLARE_KTABLE(tcb_t, thread_table, CONFIG_MAX_THREADS)
+;
 
+/* Always sorted, so we can use binary search on it */
+tcb_t* thread_map[CONFIG_MAX_THREADS];
+int thread_count;
 
-volatile tcb_t* root_thread;		// Main task
-volatile tcb_t* sigma0;			// Main memory manager
+/**
+ * current are always points to TCB which was on processor before we had fallen
+ * into interrupt handler. irq_save saves sp and r4-r11 (other are saved automatically
+ * on stack). When handler finishes, it calls thread_ctx_switch, which chooses
+ * next executable thread and returns it's context
+ *
+ * irq_return recover's thread's context
+ *
+ * See also platform/irq.h
+ */
+
+volatile tcb_t* current; // Currently on CPU
+volatile tcb_t* kernel; // Kernel thread
+volatile tcb_t* next_current; // Next dispatched on CPU
 
 void thread_init() {
 	ktable_init(&thread_table);
+
+	/* Pre-allocate system threads and set kernel as dispatched*/
+	kernel = thread_create(TID_TO_GLOBALID(THREAD_KERNEL), NULL, NULL);
+	/* Set EXC_RETURN and CONTROL reg for kernel */
+	kernel->ctx.ret = 0xFFFFFFF9;
+	kernel->ctx.ctl = 0x0;
+
+	current = kernel;
 }
 
-context_t kernel_ctx;
+extern tcb_t* caller;
+
+/*
+ * Return upper_bound with binary search
+ * */
+int thread_map_search(l4_thread_t globalid, int from, int to) {
+	int mid = 0;
+	int tid = GLOBALID_TO_TID(globalid);
+
+	/* Upper bound if beginning of array */
+	if (to == from || GLOBALID_TO_TID(thread_map[from]->t_globalid) >= tid)
+		return from;
+
+	while (from <= to) {
+		mid = from + (to - from) / 2;
+
+		if ((to - from) <= 1)
+			return to;
+
+		if (GLOBALID_TO_TID(thread_map[mid]->t_globalid) > tid)
+			to = mid;
+		else if (GLOBALID_TO_TID(thread_map[mid]->t_globalid) < tid)
+			from = mid;
+		else
+			return mid;
+	}
+
+	/*NOT REACHED*/
+	return -1;
+}
+
+/*
+ * Insert thread into thread map
+ */
+void thread_map_insert(l4_thread_t globalid, tcb_t* thr) {
+	if (thread_count == 0) {
+		thread_map[thread_count++] = thr;
+	} else {
+		int i = thread_map_search(globalid, 0, thread_count), j;
+
+		/* Move forward
+		 * Don't check if count is out of range,
+		 * because we will fail on ktable_alloc */
+
+		for (; j > i; --j)
+			thread_map[j] = thread_map[j - 1];
+
+		thread_map[i] = thr;
+		++thread_count;
+	}
+}
 
 /**
  * Create thread
  */
-tcb_t* thread_create(const thread_tag_t tt, l4_thread_t globalid, as_t* as) {
-	tcb_t *thr, *t;
+tcb_t* thread_create(l4_thread_t globalid) {
+	tcb_t *thr;
+	int id;
 
+	id = GLOBALID_TO_TID(globalid);
 	thr = (tcb_t*) ktable_alloc(&thread_table);
-	thr->tag = tt;
 
-	if(tt == THREAD_ROOT) {
-		if(!root_thread) {
-			root_thread = thr;
-		}
-		else {
+	if (!thr)
+		return NULL;
+
+	thread_map_insert(globalid, thr);
+	thr->t_localid = 0x0;
+
+	thr->t_child = NULL;
+	thr->t_parent = NULL;
+	thr->t_sibling = NULL;
+
+	thr->t_globalid = globalid;
+	thr->as = NULL;
+	thr->utcb = NULL;
+	thr->kip = NULL;
+	thr->state = T_INACTIVE;
+
+	dbg_printf(DL_THREAD, "T: New thread: %t @[%p] \n", globalid, thr);
+
+	if (caller != NULL) {
+		/* Called from user thread */
+		if (id < THREAD_SYS)
 			return NULL;
+
+		thr->t_parent = caller;
+		if (caller->t_child) {
+			tcb_t* t = caller->t_child;
+
+			while (t->t_sibling != 0)
+				t = t->t_sibling;
+			t->t_sibling = thr;
+
+			thr->t_localid = t->t_localid + (1 << 6);
+		} else {
+			/*That is first thread in child chain*/
+			caller->t_child = thr;
+
+			thr->t_localid = (1 << 6);
 		}
-
-		if(!sigma0)
-			sigma0 = thr;
-
-		thr->as = as;
-
-		thr->t_globalid = tt << 14;
-		thr->t_localid = 0;
 	}
-	else if(tt == THREAD_SIGMA0 && !sigma0) {
-		sigma0 = thr;
-
-		thr->as = as;
-		thr->t_globalid = tt << 14;
-		thr->t_localid = 0;
-	}
-	else if(tt == THREAD_USER && !current) {
-		t = current;
-
-		while(t->t_sibling);
-		t->t_sibling = thr;
-
-		thr->t_globalid = globalid;
-		thr->t_localid = t->t_localid + (1 << 6);
-		thr->as = current->as;
-	}
-
-	thr->state = T_FREE;
 
 	return thr;
 }
 
-void thread_start(void* sp, void* pc, tcb_t *thr) {
+void thread_space(l4_thread_t globalid, l4_thread_t spaceid, kip_t* kip,
+		struct utcb* utcb) {
+	tcb_t* thr = thread_by_globalid(globalid);
+
+	if (thr) {
+		/* If spaceid == dest than create new address space
+		 * else share address space between threads */
+		if (GLOBALID_TO_TID(globalid) == GLOBALID_TO_TID(spaceid)) {
+			thr->as = as_create(globalid);
+
+			dbg_printf(DL_THREAD, "\tNew space: as: %p, utcb: %p \n", as, utcb);
+		} else {
+			tcb_t* space = thread_by_globalid(spaceid);
+
+			thr->as = space->as;
+		}
+
+		if(kip != thr->kip) {
+			thr->kip = kip;
+		}
+	}
+}
+
+void thread_start(void* sp, void* pc, uint32_t xpsr, tcb_t *thr) {
 	/* Reserve 8 words for fake context */
 	sp -= 8 * sizeof(uint32_t);
 	thr->ctx.sp = sp;
-	/* Stack allocated, now use fake pc */
+
+	/*Set EXC_RETURN and CONTROL for user thread*/
+	thr->ctx.ret = 0xFFFFFFFD;
+	thr->ctx.ctl = 0x3;
+
+	/* Stack allocated, now use fake pc, lr, xpsr */
 	((uint32_t*) sp)[REG_R0] = 0x0;
 	((uint32_t*) sp)[REG_R1] = 0x0;
 	((uint32_t*) sp)[REG_R2] = 0x0;
@@ -90,103 +211,146 @@ void thread_start(void* sp, void* pc, tcb_t *thr) {
 	((uint32_t*) sp)[REG_R12] = 0x0;
 	((uint32_t*) sp)[REG_LR] = 0xFFFFFFFF;
 	((uint32_t*) sp)[REG_PC] = (uint32_t) pc;
-	((uint32_t*) sp)[REG_xPSR] = 0x1000000;				/* Thumb bit on */
+	((uint32_t*) sp)[REG_xPSR] = xpsr | 0x1000000; /* Thumb bit on*/
 
 	thr->state = T_RUNNABLE;
 }
 
-uint32_t thread_isscheduled() {
-	return (current != NULL) || (next_current != NULL);
+/*
+ * Search thread by it's global id
+ */
+tcb_t* thread_by_globalid(l4_thread_t globalid) {
+	int idx = thread_map_search(globalid, 0, thread_count);
+
+	if (GLOBALID_TO_TID(thread_map[idx]->t_globalid)
+			!= GLOBALID_TO_TID(globalid))
+		return NULL;
+	else
+		return thread_map[idx];
 }
 
-void thread_schedule(const thread_tag_t tt, tcb_t* thr) {
-	if(tt == THREAD_ROOT)
-		thr = root_thread;
-	else if(tt == THREAD_SIGMA0)
-		thr = sigma0;
+uint32_t thread_isdispatched() {
+	return (next_current != NULL);
+}
 
-	if(thr->state == T_RUNNABLE) {
-		dbg_printf(DL_THREAD, "TCB: scheduled %p\n", thr);
-		next_current = thr;
+int thread_isrunnable(tcb_t* thr) {
+	return thr->state == T_RUNNABLE;
+}
+
+void thread_dispatch(tcb_t* thr) {
+	if (thr->state == T_RUNNABLE) {
+		dbg_printf(DL_SCHEDULE, "TCB: dispatched %t\n", thr->t_globalid);
+		next_current = (volatile tcb_t*) thr;
 	}
 }
 
-void save_context(context_t* ctx, uint32_t sp) {
-	int i;
-
-	ctx->sp = sp;
-	for(i = 0; i < 8; ++i)
-		ctx->regs[i] = irq_window[i];
+tcb_t* thread_current() {
+	return (tcb_t*) current;
 }
 
 /* Switch context
  * */
-context_t* thread_ctx_switch(thread_context_t where) {
-	if(next_current && where == CTX_USER) {
-		/*Somebody rescheduled us, swap contexts*/
-		if(current) {
-			save_context(&current->ctx, irq_user_sp);
-			dbg_printf(DL_THREAD, "TCB: switch %p -> %p\n", current, next_current);
+void thread_switch() {
+	if (!softirq_isscheduled()) {
+		/*No SOFTIRQs is scheduled, we can go to userspace now*/
+
+		/*	Check if current is still runnable
+		 *	(not blocked and timeslice not exhausted)
+		 *
+		 *	kernel is always inactive, so if we in kernel now
+		 *	we will try to switch context too*/
+		if (!thread_isrunnable(current)) {
+			/*Try to reschedule if not yet done*/
+			if (!next_current)
+				schedule();
+
+			if (next_current) {
+				/*We already scheduled a thread, simply switch to it*/
+				dbg_printf(DL_THREAD, "TCB: switch %p -> %p\n", current,
+						next_current);
+				current = next_current;
+				next_current = NULL;
+
+				if (current->as)
+					as_setup_mpu(current->as);
+			} else {
+				/* Fall into kernel, than to IDLE state (WFI)*/
+				current = kernel;
+				dbg_printf(DL_THREAD, "TCB: switch %p -> IDLE\n", current);
+			}
 		}
-		else {
-			save_context(&kernel_ctx, irq_stack_pointer);
-			dbg_printf(DL_THREAD, "TCB: switch kernel -> %p\n", next_current);
-		}
-
-		/*Do switch user thread*/
-		current = next_current;
-		next_current = NULL;
-
-		as_setup_mpu(current->as);
-		mpu_enable(MPU_ENABLED);
-
-		return &current->ctx;
-	}
-	else if(current && where == CTX_KERNEL) {
-		/* Switch to kernel from user space*/
-		save_context(&current->ctx, irq_user_sp);
-
+	} else {
+		/*Jump to kernel*/
+		current = kernel;
 		dbg_printf(DL_THREAD, "TCB: switch %p -> kernel\n", current);
-
-		mpu_enable(MPU_DISABLED);
-		current = NULL;
-		return &kernel_ctx;
 	}
-
-	return NULL; /*nothing changed, going back*/
 }
 
-int schedule() {
-	tcb_t* thr;
+#if 0
+void deliver_ipc() {
+	tcb_t* thr = NULL, *from_thr = NULL;
 	int idx;
 
-	if(!thread_isscheduled()) {
-		for_each_in_ktable(thr, idx, (&thread_table)) {
-			if(thr->state != T_RUNNABLE)
-				continue;
+	for_each_in_ktable(thr, idx, (&thread_table)) {
+		if(thr->state == T_RECV_BLOCKED) {
+			/*Check if somebody sending us*/
+			if(thr->t_from != L4_NILTHREAD) {
+				from_thr = thread_by_globalid(thr->t_from);
 
-			thread_schedule(thr->tag, thr);
-			return 1;
+				dbg_printf(DL_IPC, "IPC: %t to %t (sched)\n", thr->t_from, thr->t_globalid);
+
+				from_thr->state = T_RUNNABLE;
+				thr->state = T_RUNNABLE;
+				thr->t_from = L4_NILTHREAD;
+			}
 		}
 	}
+}
+#endif
+
+int schedule() {
+	tcb_t* root = THREAD_BY_TID(THREAD_ROOT);
+
+	if (!thread_isdispatched() && root->state == T_RUNNABLE)
+		thread_dispatch(root);
 
 	return 0;
 }
 
 #ifdef CONFIG_KDB
 
+char* kdb_get_thread_type(tcb_t* thr) {
+	int id = GLOBALID_TO_TID(thr->t_globalid);
+
+	if (id == THREAD_IDLE)
+		return "IDLE";
+	else if (id == THREAD_KERNEL)
+		return "KERN";
+	else if (id == THREAD_ROOT)
+		return "ROOT";
+	else if (id >= THREAD_SYS)
+		return "[SYS]";
+	else if (id >= THREAD_USER)
+		return "[USR]";
+
+	return "???";
+}
+
 void kdb_dump_threads() {
 	tcb_t* thr;
 	int idx;
 
-	char* types[] = {"", "", "ROOT", "SIGMA0", "USER"};
-	char* state[] = {"FREE", "RUN", "SVC"};
+	char* state[] = { "", "FREE", "RUN", "SVC", "SEND", "RECV" };
 
-	dbg_printf(DL_KDB, "%6s %8s %8s %6s\n", "type", "global", "local", "state");
+	dbg_printf(DL_KDB, "%5s %8s %8s %6s %s\n", "type", "global", "local",
+			"state", "parent");
 
-	for_each_in_ktable(thr, idx, (&thread_table)) {
-		dbg_printf(DL_KDB, "%6s %t %t %6s\n", types[thr->tag], thr->t_globalid, thr->t_localid, state[thr->state]);
-	}
+	for_each_in_ktable(thr, idx, (&thread_table))
+		{
+			dbg_printf(DL_KDB, "%5s %t %t %6s %t\n", kdb_get_thread_type(thr),
+					thr->t_globalid, thr->t_localid, state[thr->state],
+					(thr->t_parent) ? thr->t_parent->t_globalid : 0);
+		}
 }
 
 #endif

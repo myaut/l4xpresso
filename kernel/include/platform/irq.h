@@ -27,44 +27,28 @@ Author: myaut
  *
  * Saves {r4-r11}, msp, psp, EXC_RETURN
  * */
-#define irq_save()													\
+#define irq_save(ctx)												\
 	__ASM volatile("cpsid i");										\
-	__ASM volatile("mov r0, %0" : : "r" (irq_window));				\
-	__ASM volatile("stm r0, {r4-r11}");								\
-	__ASM volatile("mrs r0, msp");									\
-	__ASM volatile("mov %0, r0" : "=r" (irq_stack_pointer) : );		\
-	__ASM volatile("mrs r0, psp");									\
-	__ASM volatile("mov %0, r0" : "=r" (irq_user_sp) : );			\
-	__ASM volatile("mov %0, lr" : "=r" (irq_exc_return) : );
+	__ASM volatile("mov r0, %0" : : "r" ((ctx)->regs));			\
+	__ASM volatile("stm r0, {r4-r11}");							\
+	__ASM volatile("cmp lr, #0xFFFFFFF9");							\
+	__ASM volatile("ite eq");										\
+	__ASM volatile("mrseq r0, msp");								\
+	__ASM volatile("mrsne r0, psp");								\
+	__ASM volatile("mov %0, r0" : "=r" ((ctx)->sp) : );
 
-#define irq_return()											\
-	__ASM volatile("mov r13, %0" : : "r" (irq_stack_pointer));	\
-	__ASM volatile("mov r0, %0" : : "r" (irq_window));			\
-	__ASM volatile("ldm r0, {r4-r11}");							\
-	__ASM volatile("mov lr, %0" : : "r"(irq_exc_return));		\
+#define irq_return(ctx)											\
+	__ASM volatile("mov lr, %0" : : "r"((ctx)->ret));			\
+	__ASM volatile("mov r0, %0" : : "r"((ctx)->sp));			\
+	__ASM volatile("mov r2, %0" : : "r"((ctx)->ctl));			\
+	__ASM volatile("cmp lr, #0xFFFFFFF9");						\
+	__ASM volatile("ite eq");									\
+	__ASM volatile("msreq msp, r0");							\
+	__ASM volatile("msrne psp, r0");							\
+	__ASM volatile("mov r0, %0" : : "r" ((ctx)->regs));		\
+	__ASM volatile("ldm r0, {r4-r11}");						\
+	__ASM volatile("msr control, r2"); 				  		\
 	__ASM volatile("cpsie i");									\
-	__ASM volatile("bx lr");
-
-#define irq_return_kernel(ctx)						  \
-	__ASM volatile("mov r0, %0" : : "r" (ctx->sp));	  \
-	__ASM volatile("mov r1, %0" : : "r" (ctx->regs)); \
-	__ASM volatile("mov lr, #0xFFFFFFF9");			  \
-	__ASM volatile("mov r2, #0x0");					  \
-	__ASM volatile("ldm r1, {r4-r11}");			 	  \
-	__ASM volatile("msr msp, r0"); 					  \
-	__ASM volatile("msr control, r2"); 				  \
-	__ASM volatile("cpsie i");						  \
-	__ASM volatile("bx lr");
-
-#define irq_return_user(ctx) 						  \
-	__ASM volatile("mov r0, %0" : : "r" (ctx->sp));   \
-	__ASM volatile("mov r1, %0" : : "r" (ctx->regs)); \
-	__ASM volatile("mov lr, #0xFFFFFFFD");			  \
-	__ASM volatile("mov r2, #0x3");					  \
-	__ASM volatile("ldm r1, {r4-r11}");				  \
-	__ASM volatile("msr psp, r0"); 					  \
-	__ASM volatile("msr control, r2"); 				  \
-	__ASM volatile("cpsie i");						  \
 	__ASM volatile("bx lr");
 
 #define __IRQ __attribute__ ((naked))
@@ -83,34 +67,12 @@ Author: myaut
 #define IRQ_HANDLER(name, sub) 								\
 	void name() __IRQ;										\
 	void name() {											\
-		irq_save();											\
+		irq_save(&current->ctx);							\
 		sub();												\
-		do {												\
-			context_t* ctx;									\
-			thread_context_t where;							\
-			if(!softirq_isscheduled() && 					\
-				thread_isscheduled()) {						\
-				where = CTX_USER;							\
-			}												\
-			else {											\
-				where = CTX_KERNEL;							\
-			}												\
-			ctx = thread_ctx_switch(where);					\
-			if(ctx != NULL)	{								\
-				if(where == CTX_USER) {						\
-					irq_return_user(ctx);					\
-				} 											\
-				else {										\
-					irq_return_kernel(ctx);					\
-				}											\
-			}												\
-			irq_return();									\
-		} while(0);											\
+		thread_switch();									\
+		irq_return(&current->ctx);							\
 	}
 
-extern volatile uint32_t irq_stack_pointer;
-extern volatile uint32_t irq_exc_return;
-extern volatile uint32_t irq_user_sp;
-extern volatile uint32_t irq_window[8];
+extern volatile tcb_t* current;
 
 #endif /* IRQ_H_ */

@@ -9,6 +9,7 @@ Author: myaut
 */
 
 #include <platform/armv7m.h>
+#include <platform/microops.h>
 #include <ktable.h>
 #include <config.h>
 #include <debug.h>
@@ -51,6 +52,11 @@ void kdb_dump_ktable() {
 
 #endif
 
+/*
+ * Initialize kernel table kt
+ *
+ * @param kt - pointer to kernel table
+ * */
 void ktable_init(ktable_t* kt) {
 	uint32_t  *kt_ptr = (uint32_t*) kt->bitmap,
 			  *kt_end = (uint32_t*) kt->bitmap + kt->num / 8;
@@ -63,19 +69,77 @@ void ktable_init(ktable_t* kt) {
 #endif
 }
 
+/**
+ * Checks if element already allocated
+ *
+ * @param kt - pointer to kernel table
+ * @param i - index of element to check
+ *
+ * @result
+ * 		-1 if index is out of bounds
+ * 		0 if element is free
+ * 		1 if element is allocated
+ * */
+int ktable_is_allocated(ktable_t* kt, int i) {
+	char* bptr = (char*) BIT_ADDR(kt->bitmap);
+
+	if(i > kt->num)
+		return -1;
+	bptr += i << BIT_SHIFT;
+
+	if(*bptr == 0)
+		return 0;
+
+	return 1;
+}
+
+/**
+ * Allocates element with specified index
+ *
+ * @param kt - pointer to kernel table
+ * @param i - index of element to allocate
+ *
+ * @result
+ * 		NULL if index is out of bounds or element is already allocated
+ * 		address of allocated element
+ * */
+void* ktable_alloc_id(ktable_t* kt, int i) {
+	char* bptr = (char*) BIT_ADDR(kt->bitmap);
+
+	if(i > kt->num)
+		return NULL;
+	bptr += i << BIT_SHIFT;
+
+	if(test_and_set(bptr) == 0) {
+		dbg_printf(DL_KTABLE, "KT: %s allocated %d [%p]\n", kt->tname, i,
+							kt->data + (i * kt->size));
+
+		return (void*) kt->data + (i * kt->size);
+	}
+
+	return NULL;
+}
+
+/**
+ * Allocates first free element
+ *
+ * @param kt - pointer to kernel table
+ * @param i - index of element to allocate
+ *
+ * @result
+ * 		NULL if index is out of bounds or if ktable is full
+ * 		address of allocated element
+ * */
 void* ktable_alloc(ktable_t* kt) {
 	char* bptr = (char*) BIT_ADDR(kt->bitmap);
 	size_t i;
 
 	/*Search for free element*/
 	for(i = 0; i != kt->num; ++i) {
-		if(*bptr == 0) {
-#ifdef CONFIG_DEBUG_KTABLE
+		if(test_and_set(bptr) == 0) {
 			dbg_printf(DL_KTABLE, "KT: %s allocated %d [%p]\n", kt->tname, i,
 					kt->data + (i * kt->size));
-#endif
 
-			*bptr = 1;
 			return (void*) kt->data + (i * kt->size);
 		}
 
@@ -85,23 +149,39 @@ void* ktable_alloc(ktable_t* kt) {
 	return NULL;
 }
 
+/**
+ * Gets index of element by it's pointer
+ *
+ * @param kt - pointer to kernel table
+ * @param element - pointer to table's element
+ *
+ * @result
+ * 		-1 if index is out of bounds
+ * 		or index of element
+ * */
 uint32_t ktable_getid(ktable_t* kt, void* element) {
-	size_t i = ((ptr_t) element - kt->data) / kt->size;
+	int i = ((ptr_t) element - kt->data) / kt->size;
 
 	/*Element is not from this ktable*/
-	if(i > kt->num)
+	if(i > kt->num || i < 0)
 		return -1;
 
 	return i;
 }
 
+/**
+ * Frees an element
+ *
+ * @param kt - pointer to kernel table
+ * @param element - pointer to table's element
+ *
+ * */
 void ktable_free(ktable_t* kt, void* element) {
 	size_t i = ktable_getid(kt, element);
 
 	if(i != -1) {
-#ifdef CONFIG_DEBUG_KTABLE
 		dbg_printf(DL_KTABLE, "KT: %s free %d [%p]\n", kt->tname, i, element);
-#endif
+
 		*(BIT_BITADDR(kt->bitmap, i)) = 0x0;
 	}
 }

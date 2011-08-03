@@ -80,10 +80,28 @@ uint32_t atomic_get(atomic_t* atom) {
 	return *atom;
 }
 
-
 #endif
 
+/* returns zero on success*/
+uint32_t test_and_set(uint32_t* atom) {
+	int result = 1;
 
+	__ASM volatile (
+		"mov r1, #1\n"
+		"mov r2, %0\n"
+		"ldrex r0, [r2]\n"
+		"cmp r0, #0\n"
+
+		/* Lock isn't busy, trying to get it*/
+		"itt eq\n"
+		"strexeq r0, r1, [r2]\n"
+		"moveq %1, r0\n"
+			: "=r"(result)
+			: "r"(atom)
+			: "r0", "r1", "r2");
+
+	return result;
+}
 
 void irq_disable(void) {
 	__ASM volatile ("cpsid i");

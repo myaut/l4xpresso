@@ -13,6 +13,8 @@ Author: myaut
 
 #include <platform/link.h>
 
+#define L4_NILTHREAD		0
+
 #define DECLARE_THREAD(name, sub) 					\
 	void name(void) __attribute__ ((naked));		\
 	void __USER_TEXT name(void) {					\

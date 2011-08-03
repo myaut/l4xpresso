@@ -43,7 +43,6 @@ uint32_t fifo_state(struct fifo_t* queue) {
 }
 
 uint32_t fifo_pop(struct fifo_t* queue, uint8_t* el) {
-	//Очередь пуста
 	if(fifo_length(queue) == 0) {
 		return FIFO_EMPTY;
 	}
@@ -60,6 +59,7 @@ uint32_t fifo_pop(struct fifo_t* queue, uint8_t* el) {
 
 /*Функция fifo_length возвращает длину очереди*/
 uint32_t fifo_length(struct fifo_t* queue) {
-	return (queue->q_end > queue->q_top)? (queue->q_end - queue->q_top - 1)
-			: (queue->q_end - queue->q_top + queue->q_size - 1);
+	return (queue->q_end >= queue->q_top)
+			? (queue->q_end - queue->q_top)
+			: (queue->q_size + queue->q_top - queue->q_end);
 }

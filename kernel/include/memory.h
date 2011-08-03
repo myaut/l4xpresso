@@ -11,6 +11,7 @@ Author: myaut
 #ifndef MEMORY_H_
 #define MEMORY_H_
 
+#include <config.h>
 #include <types.h>
 #include <platform/link.h>
 
@@ -58,12 +59,15 @@ struct fpage {
 typedef struct fpage fpage_t;
 
 typedef struct {
+#ifdef CONFIG_DEBUG
 	char*	 name;
+#endif
 
 	memptr_t start;
 	memptr_t end;
 
 	uint32_t flags;
+	uint32_t tag;
 } mempool_t;
 
 /* Kernel permissions flags */
@@ -95,30 +99,37 @@ typedef struct {
 #define FPAGE_LRU		0x2
 
 typedef enum {
-	MP_KERNEL_TEXT,
-	MP_USER_TEXT,
-	MP_KERNEL_DATA,
-	MP_KERNEL_BSS,
-	MP_USER_DATA,
-	MP_USER_BSS,
-	MP_MEMORY0,
-	MP_KERNEL_BITMAP,
-	MP_MEMORY1,
-	MP_APB_DEVICES,
-	MP_AHB_DEVICES,
-	MP_UNKNOWN = -1
-} mempool_id_t;
+	MPT_KERNEL_TEXT,
+	MPT_KERNEL_DATA,
+	MPT_USER_TEXT,
+	MPT_USER_DATA,
+	MPT_AVAILABLE,
+	MPT_DEVICES,
+	MPT_UNKNOWN = -1
+} mempool_tag_t;
 
 /*If fpage_size = 0, memory is not allocable*/
-#define DECLARE_MEMPOOL(name_, start_, end_, flags_) 	\
+#ifdef CONFIG_DEBUG
+#define DECLARE_MEMPOOL(name_, start_, end_, flags_, tag_) 	\
 	{													\
 		.name = name_,									\
 		.start = (memptr_t) (start_),					\
 		.end  = (memptr_t) (end_),						\
-		.flags = flags_	  								\
+		.flags = flags_,  								\
+		.tag = tag_										\
 	}
+#else
+#define DECLARE_MEMPOOL(name_, start_, end_, flags_, tag_) 	\
+	{													\
+		.start = (memptr_t) (start_),					\
+		.end  = (memptr_t) (end_),						\
+		.flags = flags_,  								\
+		.tag = tag_										\
+	}
+#endif
 
-#define DECLARE_MEMPOOL_2(name, prefix, flags) DECLARE_MEMPOOL(name, &(prefix ## _start), &(prefix ## _end), flags)
+#define DECLARE_MEMPOOL_2(name, prefix, flags, tag) \
+		DECLARE_MEMPOOL(name, &(prefix ## _start), &(prefix ## _end), flags, tag)
 
 typedef enum {
 	MPU_DISABLED,
@@ -127,9 +138,9 @@ typedef enum {
 
 void memory_init();
 
-as_t* create_as(uint32_t as_spaceid);
+as_t* as_create(uint32_t as_spaceid);
 
-int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size);
+int create_fpages(int mpid, as_t* as, memptr_t base, memptr_t size);
 void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last);
 void insert_fpage_to_as(as_t* as, fpage_t* fpage);
 int map_fpage(as_t* as, fpage_t* fpage, map_action_t action);

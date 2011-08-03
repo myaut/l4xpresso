@@ -35,7 +35,8 @@ typedef enum {
 	DL_KTIMER	= 0x0008,
 	DL_SYSCALL	= 0x0010,
 	DL_SCHEDULE	= 0x0020,
-	DL_MEMORY	= 0x0040
+	DL_MEMORY	= 0x0040,
+	DL_IPC		= 0x0080
 } dbg_layer_t;
 
 void dbg_putchar(uint8_t chr);

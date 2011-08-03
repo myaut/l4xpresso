@@ -34,6 +34,9 @@ extern uint32_t user_data_end;
 extern uint32_t user_bss_start;
 extern uint32_t user_bss_end;
 
+extern uint32_t root_stack_start;
+extern uint32_t root_stack_end;
+
 extern void kernel_stack_addr(void);
 
 #define __BSS 			__attribute__ ((section(".bss")))
@@ -42,9 +45,11 @@ extern void kernel_stack_addr(void);
 #define __KTABLE		__attribute__ ((section(".ktable")))
 #define __BITMAP		__attribute__ ((section(".bitmap")))
 
+
 #define __USER_TEXT		__attribute__ ((section(".user_text")))
 #define __USER_DATA		__attribute__ ((section(".user_data")))
 #define __USER_BSS		__attribute__ ((section(".user_bss")))
+#define __USER_SC		__attribute__ ((section(".syscall")))
 
 #define __PACKED		__attribute__ ((packed))
 

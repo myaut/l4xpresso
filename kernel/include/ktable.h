@@ -37,6 +37,8 @@ typedef struct ktable ktable_t;
 	}
 
 void  ktable_init(ktable_t* kt);
+int ktable_is_allocated(ktable_t* kt, int i);
+void* ktable_alloc_id(ktable_t* kt, int i);
 void* ktable_alloc(ktable_t* kt);
 void  ktable_free(ktable_t* kt, void* element);
 
@@ -52,7 +54,7 @@ uint32_t ktable_getid(ktable_t* kt, void* element);
  * 	 ...
  * }
  * */
-#define for_each_in_ktable(el, idx, kt)	for(el = (kt)->data, idx = 0; idx < (kt)->num; ++idx, ++el) \
+#define for_each_in_ktable(el, idx, kt)	for(el = (typeof(el)) (kt)->data, idx = 0; idx < (kt)->num; ++idx, ++el) \
 		if(((char*) BIT_ADDR((kt)->bitmap))[idx << BIT_SHIFT] == 1)
 
 #endif /* KTABLE_H_ */

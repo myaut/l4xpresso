@@ -18,6 +18,7 @@ Author: myaut
 #include <platform/link.h>
 #include <platform/debug_uart.h>
 #include <lpc/LPC17xx.h>
+
 #include <types.h>
 #include <debug.h>
 #include <kdb.h>
@@ -26,24 +27,7 @@ Author: myaut
 #include <syscall.h>
 #include <memory.h>
 #include <config.h>
-
-struct kip_t {
-	uint32_t	kernel_id;
-	uint32_t	api_version;
-	uint32_t	api_flags;
-	uint32_t	kern_desc_ptr;
-
-	uint32_t	reserved1[17];
-
-	/*TODO: finish kip*/
-
-};
-
-struct kip_t kip = {
-	.kernel_id = 0x49544D4F,	/*ITMO*/
-	.api_version = 0x8407000,	/*Ver. X.2 Rev. 7*/
-	.api_flags	= 0x00000000,	/*Little endian 32-bit*/
-};
+#include <l4/utcb.h>
 
 extern dbg_handler_t dbg_handler;
 
@@ -54,38 +38,44 @@ void debug_kdb_handler(void) {
 }
 #endif
 
-extern void dummy_thread(void);
+extern void root_thread(void);
+
+utcb_t 				root_utcb;
 extern dbg_layer_t dbg_layer;
 
-uint32_t wdt_handler(void* data) {
-	dbg_puts("WDT: handler\n");
+uint32_t sched_handler(void* data) {
+	dbg_puts("S: Scheduler\n");
+	schedule();
 
 	return 65535;
 }
 
 int main(void) {
-	as_t* user_as;
+	tcb_t* root;
 
-	dbg_uart_init(38400);
+	dbg_uart_init(115200);
 	dbg_puts("\n\n---------------------------------------"
 			"\nL4Xpresso hello!\n");
 
 	// dbg_layer = DL_BASIC | DL_KDB | DL_THREAD;
 
-	dbg_layer = 0xFFFF;
+	dbg_layer =  DL_BASIC | DL_KDB | DL_IPC | DL_SCHEDULE;
 
 	memory_init();
-	ktimer_event_init();
-	ktimer_event_create(65535,  wdt_handler, NULL);
 	syscall_init();
 	thread_init();
+
+	ktimer_event_init();
+	ktimer_event_create(65535,  sched_handler, NULL);
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
-	user_as = create_as(0);
-	thread_start(0x10007fc0, dummy_thread, thread_create(THREAD_ROOT, 0, user_as));
+	root = thread_create(TID_TO_GLOBALID(THREAD_ROOT));
+	thread_start((void*) &root_stack_end, root_thread, 0, root);
+
+	mpu_enable(MPU_ENABLED);
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will
@@ -96,7 +86,6 @@ int main(void) {
 	 * interrupt arrives (e.g. from kernel timer)*/
 	while(1) {
 		if(!softirq_execute())
-			if(!schedule())
 				wait_for_interrupt();
 	}
 }

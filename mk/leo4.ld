@@ -36,14 +36,12 @@ ENTRY (__l4_start)
  *
  */
 
-KERNEL_BASE = 0x00000800;
+SYSTEM_CALL_BASE = 0x00000800;
+KERNEL_BASE = 0x00001000;
 USERSPACE_BASE = 0x00000C000;
 
-KERNEL_STACK_SIZE    = 0x00000400;
-
-KERNEL_STACK_ADDR = 0x10000000;
-KERNEL_DATA_ADDR =  0x10000400;
-KERNEL_KIP_ADDR =   0x10007e00;
+KERNEL_STACK_SIZE    = 0x00000200;
+ROOT_THREAD_STACK_SIZE    = 0x00000200;
 
 GROUP(libcr_c.a libcr_eabihelpers.a) 
 
@@ -58,7 +56,7 @@ SECTIONS {
 		kernel_text_end = .;
 	} > MFlash512
 	
-	.user_text 0x0000c000 : 
+	.user_text 0x0000C000 : 
 	ALIGN (256)
 	{
 		user_text_start = .;
@@ -77,7 +75,7 @@ SECTIONS {
 	{
 		kernel_data_start = .;
 		kip_start = .;
-		./kernel/src/start.o (kip)
+		*(.kip*)
 		kip_end = .;
 		/*Only kernel data*/
 		*(.data*)
@@ -99,6 +97,9 @@ SECTIONS {
 	ALIGN (256)
 	{
 		user_data_start = .;
+		root_stack_start = .;
+		. += ROOT_THREAD_STACK_SIZE;
+		root_stack_end = .;
 		*(.user_data*)
 		user_data_end = .;
 	} > RamLoc32 

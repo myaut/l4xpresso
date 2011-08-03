@@ -86,19 +86,24 @@ void kdb_print_menu() {
 int kdb_handler(char c) {
 	int i;
 
+	dbg_printf(DL_KDB, "\n\n-------KDB------\n");
 	for(i = 0; i <= (sizeof(kdb_functions) / sizeof(struct kdb_t)); ++i) {
 		if(c == kdb_functions[i].option) {
 			kdb_functions[i].function();
-			return 0;
+			goto ok;
 		}
 	}
 
 	if(c == '?') {
 		kdb_print_menu();
-		return 0;
+		goto ok;
 	}
 
 	return 1;
+
+ok:
+	dbg_printf(DL_KDB, "----------------\n");
+	return 0;
 }
 
 

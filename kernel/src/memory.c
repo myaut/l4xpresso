@@ -13,27 +13,24 @@ Author: myaut
 #include <debug.h>
 #include <ktable.h>
 
+#include <kip.h>
+
 static mempool_t memmap[] = {
-	DECLARE_MEMPOOL_2("KTEXT", kernel_text, MP_KR | MP_KX | MP_NO_FPAGE),
-	DECLARE_MEMPOOL_2("UTEXT", user_text, MP_UR | MP_UX | MP_MEMPOOL | MP_MAP_ALWAYS),
-	DECLARE_MEMPOOL_2("KDATA", kernel_data, MP_KR | MP_KW | MP_NO_FPAGE),
-	DECLARE_MEMPOOL_2("KBSS", kernel_bss, MP_KR | MP_KW | MP_NO_FPAGE),
-	DECLARE_MEMPOOL_2("UDATA", user_data, MP_UR | MP_UW | MP_MEMPOOL | MP_MAP_ALWAYS),
-	DECLARE_MEMPOOL_2("UBSS", user_bss, MP_UR | MP_UW | MP_MEMPOOL  | MP_MAP_ALWAYS),
-	DECLARE_MEMPOOL  ("MEM0", &user_bss_end, 0x10008000, MP_UR | MP_UW | MP_SRAM),
-	DECLARE_MEMPOOL_2("KBITMAP", kernel_ahb, MP_KR | MP_KW | MP_NO_FPAGE),
-	DECLARE_MEMPOOL  ("MEM1", &kernel_ahb_end, 0x20084000, MP_UR | MP_UW | MP_AHB_RAM),
-	DECLARE_MEMPOOL  ("APBDEV", 0x40000000, 0x40100000, MP_UR | MP_UW | MP_DEVICES),
-	DECLARE_MEMPOOL  ("AHBDEV", 0x50000000, 0x50200000, MP_UR | MP_UW | MP_DEVICES)
+	DECLARE_MEMPOOL_2("KTEXT", kernel_text, MP_KR | MP_KX | MP_NO_FPAGE, MPT_KERNEL_TEXT),
+	DECLARE_MEMPOOL_2("UTEXT", user_text, MP_UR | MP_UX | MP_MEMPOOL | MP_MAP_ALWAYS, MPT_USER_TEXT),
+	DECLARE_MEMPOOL_2("KDATA", kernel_data, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
+	DECLARE_MEMPOOL_2("KBSS",  kernel_bss, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
+	DECLARE_MEMPOOL_2("UDATA", user_data, MP_UR | MP_UW | MP_MEMPOOL | MP_MAP_ALWAYS, MPT_USER_DATA),
+	DECLARE_MEMPOOL_2("UBSS",  user_bss, MP_UR | MP_UW | MP_MEMPOOL  | MP_MAP_ALWAYS, MPT_USER_DATA),
+	DECLARE_MEMPOOL  ("MEM0",  &user_bss_end, 0x10008000, MP_UR | MP_UW | MP_SRAM, MPT_AVAILABLE),
+	DECLARE_MEMPOOL_2("KBITMAP", kernel_ahb, MP_KR | MP_KW | MP_NO_FPAGE, MPT_KERNEL_DATA),
+	DECLARE_MEMPOOL  ("MEM1",   &kernel_ahb_end, 0x20084000, MP_UR | MP_UW | MP_AHB_RAM, MPT_AVAILABLE),
+	DECLARE_MEMPOOL  ("APBDEV", 0x40000000, 0x40100000, MP_UR | MP_UW | MP_DEVICES, MPT_DEVICES),
+	DECLARE_MEMPOOL  ("AHBDEV", 0x50000000, 0x50200000, MP_UR | MP_UW | MP_DEVICES, MPT_DEVICES)
 };
 
 DECLARE_KTABLE(as_t, as_table, CONFIG_MAX_ADRESS_SPACES);
 DECLARE_KTABLE(fpage_t, fpage_table, CONFIG_MAX_FPAGES);
-
-void memory_init() {
-	ktable_init(&as_table);
-	ktable_init(&fpage_table);
-}
 
 memptr_t addr_align(memptr_t addr, uint32_t size) {
 	if(addr & (size - 1))
@@ -48,6 +45,30 @@ int fp_addr_log2(memptr_t addr) {
 	while ((addr <<= 1) != 0) ++shift;
 
 	return 31 - shift;
+}
+
+void memory_init() {
+	int i = 0, j = 0;
+
+	ktable_init(&as_table);
+	ktable_init(&fpage_table);
+
+	/* Initialize mempool table in KIP */
+	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
+		switch(memmap[i].tag) {
+		case MPT_USER_DATA:
+		case MPT_USER_TEXT:
+		case MPT_DEVICES:
+		case MPT_AVAILABLE:
+			mem_desc[j++].base = addr_align((memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) | i;
+			mem_desc[j++].size = addr_align((memmap[i].end - memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) |
+					memmap[i].tag;
+			j++;
+		}
+	}
+
+	kip.memory_info.s.memory_desc_ptr = mem_desc;
+	kip.memory_info.s.n 			  = j;
 }
 
 /*
@@ -85,7 +106,7 @@ void insert_fpage_to_as(as_t* as, fpage_t* fpage) {
 	insert_fpage_chain_to_as(as, fpage, fpage);
 }
 
-fpage_t* create_fpage(mempool_id_t mpid, as_t* as, memptr_t base, size_t shift) {
+fpage_t* create_fpage(int mpid, as_t* as, memptr_t base, size_t shift) {
 	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
 
 	fpage->as = as;
@@ -104,19 +125,19 @@ fpage_t* create_fpage(mempool_id_t mpid, as_t* as, memptr_t base, size_t shift) 
 	return fpage;
 }
 
-int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
+int create_fpages(int mpid, as_t* as, memptr_t base, memptr_t size) {
 	int i, shift, bshift, sshift;
 	fpage_t *fpage = NULL, *first = NULL, *last = NULL;
 
 	/*if mpid is unknown, search using base addr*/
-	if(mpid == MP_UNKNOWN) {
+	if(mpid == -1) {
 		for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
 			if(memmap[i].start <= base && memmap[i].end >= (base + size) ) {
 				mpid = i;
 				break;
 			}
 		}
-		if(mpid == MP_UNKNOWN) {
+		if(mpid == -1) {
 			/* Cannot find appropriate mempool, return NULL*/
 			return -1;
 		}
@@ -124,9 +145,6 @@ int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
 
 	switch(memmap[mpid].flags & MP_FPAGE_MASK) {
 	case MP_MEMPOOL:
-		base = addr_align((memmap[mpid].start), CONFIG_LEAST_FPAGE_SIZE);
-		size = addr_align((memmap[mpid].end - memmap[mpid].start), CONFIG_LEAST_FPAGE_SIZE);
-		break;
 	case MP_SRAM:
 	case MP_AHB_RAM:
 		base = addr_align(base, CONFIG_LEAST_FPAGE_SIZE);
@@ -178,7 +196,7 @@ int create_fpages(mempool_id_t mpid, as_t* as, memptr_t base, memptr_t size) {
 }
 
 /*
- * Should be platform functions
+ * Should be platform-specific functions
  */
 void mpu_setup_region(int n, fpage_t* fp) {
 	static uint32_t* mpu_base = (uint32_t*) 0xE000ED9C;
@@ -224,7 +242,7 @@ void as_setup_mpu(as_t* as) {
 			}
 			else if(fp->fpage.flags & FPAGE_LRU) {
 				/*Slots exhausted, search first non-LRU fpage and replace it*/
-				for(i = k; i < 8; ++i) {
+				for(i = 7; i > k; --i) {
 					if(!(lru & (1 << i))) {
 						lru |= 1 << i;
 						mpu[i] = fp;
@@ -246,7 +264,7 @@ void as_setup_mpu(as_t* as) {
 	}
 }
 
-as_t* create_as(uint32_t as_spaceid) {
+as_t* as_create(uint32_t as_spaceid) {
 	as_t* as = (as_t*) ktable_alloc(&as_table);
 	int i;
 
@@ -256,17 +274,23 @@ as_t* create_as(uint32_t as_spaceid) {
 	as->first = NULL;
 
 	if(as_spaceid == 0) {
-		/* Create entire space */
+		/* Create entire space (for root thread)*/
 
 		for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
-			if(memmap[i].flags & MP_UR) {
-				/* For all user readable memory pools create fpage*/
+			switch(memmap[i].tag) {
+			case MPT_USER_DATA:
+			case MPT_USER_TEXT:
+				/* Create fpages only for user text and user data*/
 				create_fpages(i, as, memmap[i].start, (memmap[i].end - memmap[i].start));
 			}
 		}
 	}
 
 	return as;
+}
+
+void as_map_user(as_t* as) {
+
 }
 
 int map_fpage(as_t* as, fpage_t* fpage, map_action_t action) {
@@ -314,7 +338,7 @@ void kdb_dump_as() {
 		dbg_printf(DL_KDB, "Address Space %p\n", as->as_spaceid);
 
 		while(fpage) {
-			dbg_printf(DL_MEMORY, "MEM: fpage %s [b:%p, sz:2**%d]\n", memmap[fpage->fpage.mpid].name,
+			dbg_printf(DL_KDB, "MEM: fpage %s [b:%p, sz:2**%d]\n", memmap[fpage->fpage.mpid].name,
 						fpage->fpage.base, fpage->fpage.shift);
 			fpage = fpage->as_next;
 			++nl;
