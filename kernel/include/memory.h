@@ -27,16 +27,18 @@ struct fpage;
 typedef struct {
 	uint32_t	as_spaceid;
 	struct fpage* 	first;
+
+	struct fpage* 	lru;			/*LRU page, will be mapped as MAP_ALWAYS*/
 } as_t;
 
 /*
  * Note that fpage format is not compliant with L4 X2 binary format
  *
  * as_next - next in address space chain
- * map_next - next in mappings chain
+ * map_next - next in mappings chain (cycle list)
  *
  * base - base address of fpage
- * size - size of fpage
+ * shift - size of fpage == 1 << shift
  * rwx - access bits
  * mpid - id of memory pool
  * flags - flags*/
@@ -96,7 +98,8 @@ typedef struct {
 #define MP_USER_PERM(mpflags) ((mpflags & 0xF0) >> 4)
 
 #define FPAGE_ALWAYS	0x1
-#define FPAGE_LRU		0x2
+#define FPAGE_CLONE 	0x2		/*Fpage is mapped from other as*/
+#define FPAGE_MAPPED 	0x4		/*Fpage is mapped with MAP (unavailable in original AS)*/
 
 typedef enum {
 	MPT_KERNEL_TEXT,
@@ -140,11 +143,16 @@ void memory_init();
 
 as_t* as_create(uint32_t as_spaceid);
 
-int create_fpages(int mpid, as_t* as, memptr_t base, memptr_t size);
+void create_fpage_chain(memptr_t base, memptr_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast);
+int create_fpages(as_t* as, memptr_t base, memptr_t size);
+int create_fpages_ext(int mpid, as_t* as, memptr_t base, memptr_t size, fpage_t** pfirst,
+		fpage_t** plast);
 void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last);
 void insert_fpage_to_as(as_t* as, fpage_t* fpage);
-int map_fpage(as_t* as, fpage_t* fpage, map_action_t action);
+int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action);
+int unmap_fpage(as_t* as, fpage_t* fpage);
 void as_setup_mpu(as_t* as);
 void mpu_enable(mpu_state_t i);
+int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged);
 
 #endif /* MEMORY_H_ */

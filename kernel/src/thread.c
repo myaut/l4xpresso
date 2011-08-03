@@ -58,7 +58,7 @@ void thread_init() {
 	ktable_init(&thread_table);
 
 	/* Pre-allocate system threads and set kernel as dispatched*/
-	kernel = thread_create(TID_TO_GLOBALID(THREAD_KERNEL), NULL, NULL);
+	kernel = thread_create(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
 	/* Set EXC_RETURN and CONTROL reg for kernel */
 	kernel->ctx.ret = 0xFFFFFFF9;
 	kernel->ctx.ctl = 0x0;
@@ -121,7 +121,7 @@ void thread_map_insert(l4_thread_t globalid, tcb_t* thr) {
 /**
  * Create thread
  */
-tcb_t* thread_create(l4_thread_t globalid) {
+tcb_t* thread_create(l4_thread_t globalid, l4_thread_t spaceid, utcb_t* utcb) {
 	tcb_t *thr;
 	int id;
 
@@ -166,32 +166,29 @@ tcb_t* thread_create(l4_thread_t globalid) {
 
 			thr->t_localid = (1 << 6);
 		}
+		thread_space(thr, spaceid, utcb);
 	}
 
 	return thr;
 }
 
-void thread_space(l4_thread_t globalid, l4_thread_t spaceid, kip_t* kip,
-		struct utcb* utcb) {
-	tcb_t* thr = thread_by_globalid(globalid);
+void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb) {
+	/* If spaceid == dest than create new address space
+	 * else share address space between threads */
+	if (GLOBALID_TO_TID(thr->t_globalid) == GLOBALID_TO_TID(spaceid)) {
+		thr->as = as_create(globalid);
 
-	if (thr) {
-		/* If spaceid == dest than create new address space
-		 * else share address space between threads */
-		if (GLOBALID_TO_TID(globalid) == GLOBALID_TO_TID(spaceid)) {
-			thr->as = as_create(globalid);
+		/*Grant kip_fpage & kip_ext_fpage only to new AS*/
+		map_fpage(NULL, thr->as, kip_fpage, GRANT);
+		map_fpage(NULL, thr->as, kip_ext_fpage, GRANT);
 
-			dbg_printf(DL_THREAD, "\tNew space: as: %p, utcb: %p \n", as, utcb);
-		} else {
-			tcb_t* space = thread_by_globalid(spaceid);
+		dbg_printf(DL_THREAD, "\tNew space: as: %p, utcb: %p \n", thr->as, utcb);
+	} else {
+		tcb_t* space = thread_by_globalid(spaceid);
 
-			thr->as = space->as;
-		}
-
-		if(kip != thr->kip) {
-			thr->kip = kip;
-		}
+		thr->as = space->as;
 	}
+	map_area(caller->as, thr->as, (void*) utcb, sizeof(utcb_t), GRANT, thread_ispriviliged(caller));
 }
 
 void thread_start(void* sp, void* pc, uint32_t xpsr, tcb_t *thr) {
@@ -246,6 +243,10 @@ void thread_dispatch(tcb_t* thr) {
 
 tcb_t* thread_current() {
 	return (tcb_t*) current;
+}
+
+int thread_ispriviliged(tcb_t* thread) {
+	return GLOBALID_TO_TID(thread->t_globalid) == THREAD_ROOT;
 }
 
 /* Switch context

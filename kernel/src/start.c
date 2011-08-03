@@ -72,7 +72,7 @@ int main(void) {
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
-	root = thread_create(TID_TO_GLOBALID(THREAD_ROOT));
+	root = thread_create(TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
 	thread_start((void*) &root_stack_end, root_thread, 0, root);
 
 	mpu_enable(MPU_ENABLED);

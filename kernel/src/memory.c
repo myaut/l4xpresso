@@ -47,6 +47,22 @@ int fp_addr_log2(memptr_t addr) {
 	return 31 - shift;
 }
 
+int addr_in_fpage(memptr_t addr, fpage_t* fpage) {
+	return (addr >= fpage->fpage.base &&
+			 addr <= fpage->fpage.base + (1 << fpage->fpage.shift));
+}
+
+memptr_t mempool_align(int mpid, memptr_t addr) {
+	switch(memmap[mpid].flags & MP_FPAGE_MASK) {
+	case MP_MEMPOOL:
+	case MP_SRAM:
+	case MP_AHB_RAM:
+		return addr_align(addr, CONFIG_LEAST_FPAGE_SIZE);
+	case MP_DEVICES:
+		return addr & 0xFFFC0000;
+	}
+}
+
 void memory_init() {
 	int i = 0, j = 0;
 
@@ -106,9 +122,25 @@ void insert_fpage_to_as(as_t* as, fpage_t* fpage) {
 	insert_fpage_chain_to_as(as, fpage, fpage);
 }
 
-fpage_t* create_fpage(int mpid, as_t* as, memptr_t base, size_t shift) {
+void remove_fpage_from_as(as_t* as, fpage_t* fp) {
+	fpage_t* fpprev = as->first;
+
+	while(fpprev->as_next != fp) {
+		/*Fpage from wrong AS*/
+		if(fpprev->as_next == NULL)
+			return;
+
+		fpprev = fpprev->as_next;
+	}
+
+	/*Remove from chain*/
+	fpprev->as_next = fp->as_next;
+}
+
+fpage_t* create_fpage(memptr_t base, size_t shift, as_t* as, int mpid) {
 	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
 
+	/*FIXME: check for fpage == NULL*/
 	fpage->as = as;
 	fpage->as_next = NULL;
 	fpage->map_next = fpage; 	/*That is first fpage in mapping*/
@@ -125,39 +157,91 @@ fpage_t* create_fpage(int mpid, as_t* as, memptr_t base, size_t shift) {
 	return fpage;
 }
 
-int create_fpages(int mpid, as_t* as, memptr_t base, memptr_t size) {
-	int i, shift, bshift, sshift;
-	fpage_t *fpage = NULL, *first = NULL, *last = NULL;
+void create_fpage_chain(memptr_t base, memptr_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast) {
+	int shift, sshift, bshift;
+	fpage_t* fpage = NULL;
+
+	while(size) {
+		/* Select lease of log2(base),log2(size). Needed to make regions with correct align*/
+		bshift = fp_addr_log2(base);
+		sshift = fp_addr_log2(size);
+
+		shift = ((1 << bshift) > size)? sshift : bshift;
+
+		if(!*pfirst) {
+			/*Create first page*/
+			fpage = create_fpage(mpid, as, base, shift);
+			*pfirst = fpage;
+		}
+		else {
+			/*Build chain*/
+			fpage->as_next = create_fpage(mpid, as, base, shift);
+			*plast = fpage;
+			fpage = fpage->as_next;
+		}
+
+		size -= (1 << shift);
+		base += (1 << shift);
+	}
+}
+
+fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
+	memptr_t base = fpage->fpage.base,
+			 end = fpage->fpage.base + (1 << fpage->fpage.shift);
+	fpage_t *lfirst, *llast, *rfirst, *rlast;
+	split = mempool_align(fpage->fpage.mpid, split);
+
+	/*Check if we can split something*/
+	if(split == base || split == end) {
+		return fpage;
+	}
+
+	if(fpage->map_next != fpage) {
+		/*Splitting not supported for mapped pages*/
+		/*UNIMPLIMENTED*/
+		return NULL;
+	}
+
+	/*Split fpage into two chains of fpages*/
+	create_fpage_chain(base, (split - base), as, fpage->fpage.mpid, &lfirst, &llast);
+	create_fpage_chain(split,(end - split),  as, fpage->fpage.mpid, &rfirst, &rlast);
+
+	remove_fpage_from_as(fpage);
+	ktable_free(&fpage_table, fpage);
+
+	insert_fpage_chain_to_as(as, lfirst, llast);
+	insert_fpage_chain_to_as(as, rfirst, rlast);
+
+	if(rl == 0) return lfirst;
+	else return llast;
+}
+
+int mempool_search(memptr_t base, memptr_t size) {
+	int i;
+
+	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
+		if(memmap[i].start <= base && memmap[i].end >= (base + size) ) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+int create_fpages_ext(int mpid, as_t* as, memptr_t base, memptr_t size, fpage_t** pfirst,
+		fpage_t** plast) {
+	fpage_t *fpage = NULL;
+
+	if(size == 0)
+		return -2;
 
 	/*if mpid is unknown, search using base addr*/
 	if(mpid == -1) {
-		for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
-			if(memmap[i].start <= base && memmap[i].end >= (base + size) ) {
-				mpid = i;
-				break;
-			}
-		}
-		if(mpid == -1) {
-			/* Cannot find appropriate mempool, return NULL*/
+		if((mpid = mempool_search(base, size)) == -1) {
+			/* Cannot find appropriate mempool, return error*/
 			return -1;
 		}
 	}
 
-	switch(memmap[mpid].flags & MP_FPAGE_MASK) {
-	case MP_MEMPOOL:
-	case MP_SRAM:
-	case MP_AHB_RAM:
-		base = addr_align(base, CONFIG_LEAST_FPAGE_SIZE);
-		size = addr_align(size, CONFIG_LEAST_FPAGE_SIZE);
-		break;
-	case MP_DEVICES:
-		base = base & 0xFFFC0000;
-		size = size & 0xFFFC0000;
-		break;
-	}
-
-	if(size == 0)
-		return -2;
 
 	/* Create chain of fpages
 	 *
@@ -167,32 +251,15 @@ int create_fpages(int mpid, as_t* as, memptr_t base, memptr_t size) {
 
 	dbg_printf(DL_MEMORY, "MEM: fpage chain %s [b:%p, sz:%p] as %p\n", memmap[mpid].name, base, size, as);
 
-	while(size) {
-		/* Select lease of log2(base),log2(size). Needed to make regions with correct align*/
-		bshift = fp_addr_log2(base);
-		sshift = fp_addr_log2(size);
-
-		shift = ((1 << bshift) > size)? sshift : bshift;
-
-		if(!first) {
-			first = create_fpage(mpid, as, base, shift);
-			fpage = first;
-		}
-		else {
-			fpage->as_next = create_fpage(mpid, as, base, shift);
-			last = fpage;
-			fpage = fpage->as_next;
-		}
-		size -= (1 << shift);
-		base += (1 << shift);
-	}
-
-	if(last)
-		insert_fpage_chain_to_as(as, first, last);
-	else
-		insert_fpage_to_as(as, first);
+	create_fpage_chain(mempool_align(mpid, base), mempool_align(mpid, size), as, mpid, pfirst, plast);
+	insert_fpage_chain_to_as(as, *pfirst, *plast);
 
 	return 0;
+}
+
+int create_fpages(as_t* as, memptr_t base, memptr_t size) {
+	fpage_t *first = NULL, *last = NULL;
+	create_fpages_ext(-1, as, base, size, &first, &last);
 }
 
 /*
@@ -216,44 +283,29 @@ void mpu_enable(mpu_state_t i) {
 
 void as_setup_mpu(as_t* as) {
 	fpage_t* mpu[8];
-	char lru = 0;		/*Is fpage lru?*/
 	fpage_t* fp = as->first;
 	int i = 0, j = 7, k = 0;
 
 	/*
 	 * We walk thru fpage list
-	 * [0:k] are always-mapped fpages
-	 * [k:7] are LRU fpages
-	 *
-	 * We clear all lru bits in fpages list
-	 * When memfault occurs, it sets lru flag in fpage flags
+	 * [0:k] are always-mapped fpages + LRU page
+	 * [k:7] are others
 	 * */
 
 	while(fp != NULL) {
-		if(fp->fpage.flags & FPAGE_ALWAYS) {
+		if(fp->fpage.flags & FPAGE_ALWAYS ||
+				fp == as->lru) {
 			if(k < 8)
 				mpu[k++] = fp;
 		}
 		else {
-			if(j >= k) {
+			if(j >= k)
 				mpu[j--] = fp;
-				if(fp->fpage.flags & FPAGE_LRU)
-					lru |= 1 << j;
-			}
-			else if(fp->fpage.flags & FPAGE_LRU) {
-				/*Slots exhausted, search first non-LRU fpage and replace it*/
-				for(i = 7; i > k; --i) {
-					if(!(lru & (1 << i))) {
-						lru |= 1 << i;
-						mpu[i] = fp;
-					}
-				}
-			}
 		} /*Non-always fpage mapping*/
-
-		fp->fpage.flags &= ~FPAGE_LRU;
 		fp = fp->as_next;
 	}
+
+	as->lru = NULL;
 
 	for(i = 0; i < k; ++i) {
 		mpu_setup_region(i, mpu[i]);
@@ -261,6 +313,17 @@ void as_setup_mpu(as_t* as) {
 
 	for(i = 7; i > j; --i) {
 		mpu_setup_region(i, mpu[i]);
+	}
+}
+
+void as_map_user(as_t* as) {
+	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
+		switch(memmap[i].tag) {
+		case MPT_USER_DATA:
+		case MPT_USER_TEXT:
+			/* Create fpages only for user text and user data*/
+			create_fpages(as, memmap[i].start, (memmap[i].end - memmap[i].start));
+		}
 	}
 }
 
@@ -273,30 +336,154 @@ as_t* as_create(uint32_t as_spaceid) {
 	as->as_spaceid = as_spaceid;
 	as->first = NULL;
 
-	if(as_spaceid == 0) {
-		/* Create entire space (for root thread)*/
-
-		for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
-			switch(memmap[i].tag) {
-			case MPT_USER_DATA:
-			case MPT_USER_TEXT:
-				/* Create fpages only for user text and user data*/
-				create_fpages(i, as, memmap[i].start, (memmap[i].end - memmap[i].start));
-			}
-		}
-	}
-
 	return as;
 }
 
-void as_map_user(as_t* as) {
+int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action) {
+	fpage_t* fpmap = (fpage_t*) ktable_alloc(&fpage_table);
 
+	/*FIXME: check for fpage == NULL*/
+
+	/*Copy fpage description*/
+	fpmap->raw[0] = fpage->raw[0];
+	fpmap->raw[1] = fpage->raw[1];
+
+	/*Set flags correctly*/
+	if(action == MAP)
+		fpage->fpage.flags |= FPAGE_MAPPED;
+	fpmap->fpage.flags = FPAGE_CLONE;
+
+	/*Insert into mapee list*/
+	fpmap->map_next = fpage->map_next;
+	fpage->map_next = fpmap;
+
+	/*Insert into AS*/
+	insert_fpage_to_as(dst, fpage);
+
+	dbg_printf(DL_MEMORY, "MEM: %s fpage %p from %p to %p\n", (action == MAP)? "mapped" : "granted", fpage, src, dst);
+
+	return 0;
 }
 
-int map_fpage(as_t* as, fpage_t* fpage, map_action_t action) {
-	/*NOT IMPLEMENTED*/
-	return -1;
+int unmap_fpage(as_t* as, fpage_t* fpage) {
+	fpage_t* fpprev = fpage;
+
+	dbg_printf(DL_MEMORY, "MEM: unmapped fpage %p from %p\n", fpage, as);
+
+	/* Fpages that are not mapped or granted
+	 * are destroyed with it's AS */
+	if(!(fpage->fpage.flags & FPAGE_CLONE))
+		return -1;
+
+	while(fpprev->map_next != fpage) fpprev = fpprev->map_next;
+	/*Clear flags*/
+	fpprev->fpage.flags &= ~FPAGE_MAPPED;
+
+	fpprev->map_next = fpage->map_next;
+	remove_fpage_from_as(as, fpage);
+
+	if(as->lru == fpage)
+		as->lru = NULL;
+
+	ktable_free(&fpage_table, fpage);
+
+	return 0;
 }
+
+int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged) {
+	/*Most complicated part of mapping subsystem*/
+	memptr_t end = base + size, probe = base;
+	fpage_t *fp = src->first, *first = NULL, *last = NULL;
+	int last_invalid = 0;
+
+	/*FIXME: reverse mappings (i.e. thread 1 maps 0x1000 to thread 2, than thread 2 does
+	 * the same to thread 1).*/
+
+	/* For priviliged thread (ROOT), we use shadowed mapping,
+	 * so first we will check if that fpages are exist
+	 * than create them*/
+
+	/* FIXME: checking existence of fpages*/
+
+	if(is_priviliged) {
+		create_fpages_ext(-1, src, base, size, &first, &last);
+		if(src == dst) {
+			/*Maps to itself, ignore other actions*/
+			return 0;
+		}
+	}
+	else {
+		/* We should determine first and last fpage we will map to:
+		 *
+		 * +----------+    +----------+    +----------+
+		 * |   first  | -> |          | -> |  last    |
+		 * +----------+    +----------+    +----------+
+		 *     ^base		^    +size      =    ^end
+		 *                  |probe
+		 *
+		 * probe checks that addresses in fpage are sequental
+		 * */
+		while(fp) {
+			if(!first && addr_in_fpage(base, fp)) {
+				first = fp;
+			}
+
+			if(!last && addr_in_fpage(end, fp)) {
+				last = fp;
+				break;
+			}
+
+			if(first) {
+				/*Check if addresses in fpage list are sequental*/
+				if(!addr_in_fpage(probe, fp))
+					return -1;
+
+				probe += (1 << fp->fpage.shift);
+			}
+
+			fp = fp->as_next;
+		}
+	}
+
+	if(!last || !first) {
+		/* Not in address space or error */
+		return -1;
+	}
+
+	if(first == last)
+		last_invalid = 1;
+
+	/* That is a problem because we should split
+	 * fpages into two (and split all mappings too) */
+
+	first = split_fpage(src, first, base, 1);
+
+	/* If first and last were same pages, after first split,
+	* last fpage will be invalidated, so we search it again*/
+	if(last_invalid) {
+		fp = first;
+		while(fp) {
+			if(addr_in_fpage(end, fp)) {
+					last = fp;
+					break;
+			}
+			fp = fp->as_next;
+		}
+	}
+
+	last  = split_fpage(src, last, end, 0);
+
+	/*Map chain of fpages*/
+
+	fp = first;
+	do {
+		map_fpage(src, dst, fp, action);
+		fp = fp->next;
+	} while(fp != last);
+
+	return 0;
+}
+
 
 #ifdef CONFIG_KDB
 
