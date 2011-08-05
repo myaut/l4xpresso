@@ -27,6 +27,7 @@ Author: myaut
 
 
 typedef enum {
+	DL_EMERG	= 0x0000,
 	DL_BASIC	= 0x8000,
 	DL_KDB 		= 0x4000,
 	DL_KTABLE	= 0x0001,

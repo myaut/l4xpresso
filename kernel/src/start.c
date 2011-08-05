@@ -65,23 +65,24 @@ int main(void) {
 
 	memory_init();
 	syscall_init();
-	thread_init();
+	thread_init_subsys();
 
 	ktimer_event_init();
-	ktimer_event_create(4096, sched_handler, NULL);
-	ktimer_event_create(4096, ipc_deliver, NULL);
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
-	root = thread_create(TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
+	root = thread_init(TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
 	thread_space(root, TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
 	as_map_user(root->as);
 
 	thread_start((void*) &root_stack_end, root_thread, 0, root);
 
 	mpu_enable(MPU_ENABLED);
+
+	ktimer_event_create(4096, sched_handler, NULL);
+	ktimer_event_create(4096, ipc_deliver, NULL);
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will
@@ -96,13 +97,13 @@ int main(void) {
 }
 
 void init_zero_seg(uint32_t* dst, uint32_t* dst_end) {
-	while(dst != dst_end) {
+	while(dst < dst_end) {
 			*dst++ = 0;
 	}
 }
 
 void init_copy_seg(uint32_t* src, uint32_t* dst, uint32_t* dst_end) {
-	while(dst != dst_end) {
+	while(dst < dst_end) {
 			*dst++ = *src++;
 	}
 }

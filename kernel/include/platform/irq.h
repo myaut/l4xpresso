@@ -22,6 +22,8 @@ Author: myaut
  * */
 
 
+#define irq_disable() __ASM volatile("cpsid i");
+
 /*
  * irq_save()
  *

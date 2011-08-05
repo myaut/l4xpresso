@@ -89,7 +89,7 @@ void dbg_printf(dbg_layer_t layer, char* fmt, ...) {
 
 	va_start(va, fmt);
 
-	if(!(dbg_layer & layer))
+	if(layer != DL_EMERG && !(dbg_layer & layer))
 		return;
 
 	while(*fmt) {

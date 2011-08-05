@@ -49,6 +49,6 @@ void dbg_uart_init(uint32_t baudrate);
 void dbg_uart_interrupt (void);
 
 typedef int (*dbg_handler_t)(char);
-void dbg_panic_puts(uint8_t* str);
+void dbg_start_panic();
 
 #endif /* DEBUG_UART_H_ */

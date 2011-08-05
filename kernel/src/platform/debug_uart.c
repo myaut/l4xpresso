@@ -17,6 +17,8 @@ static struct dbg_uart_t dbg_uart;
 static uint8_t dbg_uart_tx_buffer[SEND_BUFSIZE];
 static uint8_t dbg_uart_rx_buffer[RECV_BUFSIZE];
 
+enum {DBG_ASYNC, DBG_PANIC} dbg_state;
+
 void dbg_uart_init(uint32_t baudrate)
 {
   uint32_t Fdiv;
@@ -59,6 +61,8 @@ void dbg_uart_init(uint32_t baudrate)
   dbg_uart.ready = 1;
   fifo_init(&(dbg_uart.tx), dbg_uart_tx_buffer, SEND_BUFSIZE);
   fifo_init(&(dbg_uart.rx), dbg_uart_rx_buffer, RECV_BUFSIZE);
+
+  dbg_state = DBG_ASYNC;
 }
 
 static void dbg_uart_recv() {
@@ -135,7 +139,30 @@ void dbg_uart_interrupt (void)
   }
 }
 
-void dbg_putchar(uint8_t chr)
+uint8_t dbg_getchar() {
+	uint8_t chr = 0;
+
+	if(fifo_pop(&(dbg_uart.rx), &chr) == FIFO_EMPTY)
+		return 0;
+	else
+		return chr;
+
+}
+
+void dbg_async_putchar(char chr);
+void dbg_sync_putchar(char chr);
+
+void dbg_putchar(char chr) {
+	/* During panic we cannot use async dbg uart, so
+	 * switch to synchronious*/
+
+	if(dbg_state != DBG_PANIC)
+		dbg_async_putchar(chr);
+	else
+		dbg_sync_putchar(chr);
+}
+
+void dbg_async_putchar(char chr)
 {
 	/*If UART is busy, try to put chr into queue until
 	 * slot is freed else write directly into UART */
@@ -148,25 +175,15 @@ void dbg_putchar(uint8_t chr)
 	}
 }
 
-uint8_t dbg_getchar() {
-	uint8_t chr = 0;
-
-	if(fifo_pop(&(dbg_uart.rx), &chr) == FIFO_EMPTY)
-		return 0;
-	else
-		return chr;
-
-}
-
-void dbg_sync_putchar(char c) {
-	if(c == '\n')
+void dbg_sync_putchar(char chr) {
+	if(chr == '\n')
 		dbg_sync_putchar('\r');
 
 	while(!(LPC_UART3->IIR & 0x2));
-	LPC_UART3->THR = c;
+	LPC_UART3->THR = chr;
 }
 
-void dbg_panic_puts(uint8_t* str)
+void dbg_start_panic()
 {
 	char chr;
 
@@ -174,11 +191,10 @@ void dbg_panic_puts(uint8_t* str)
 	 * not, so will write symbols synchronously */
 	NVIC_DisableIRQ(UART3_IRQn);
 
-	while(*str++) {
-		dbg_sync_putchar(*str);
-	}
-
+	/* Flush remaining symbols in async buffer */
 	while(fifo_pop(&(dbg_uart.tx), &chr) != FIFO_EMPTY) {
 		dbg_sync_putchar(chr);
 	}
+
+	dbg_state = DBG_PANIC;
 }

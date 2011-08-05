@@ -11,6 +11,7 @@
 #include <thread.h>
 #include <ktable.h>
 #include <config.h>
+#include <error.h>
 #include <debug.h>
 #include <platform/irq.h>
 #include <platform/armv7m.h>
@@ -51,22 +52,22 @@ int thread_count;
  * See also platform/irq.h
  */
 
-volatile tcb_t* current; // Currently on CPU
-volatile tcb_t* kernel; // Kernel thread
-volatile tcb_t* next_current; // Next dispatched on CPU
+volatile tcb_t* current; 			// Currently on CPU
+volatile tcb_t* kernel; 			// Kernel thread
+volatile tcb_t* next_current; 		// Next to be dispatched on CPU
 
 /*KIP declarations*/
 fpage_t *kip_fpage, *kip_extra_fpage;
 extern kip_t kip;
 extern char* kip_extra;
 
-void thread_init() {
+void thread_init_subsys() {
 	fpage_t* last = NULL;
 
 	ktable_init(&thread_table);
 
 	/* Pre-allocate system threads and set kernel as dispatched*/
-	kernel = thread_create(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
+	kernel = thread_init(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
 	/* Set EXC_RETURN and CONTROL reg for kernel */
 	kernel->ctx.ret = 0xFFFFFFF9;
 	kernel->ctx.ctl = 0x0;
@@ -85,7 +86,7 @@ void thread_init() {
 extern tcb_t* caller;
 
 /*
- * Return upper_bound with binary search
+ * Return upper_bound using binary search
  * */
 int thread_map_search(l4_thread_t globalid, int from, int to) {
 	int mid = 0;
@@ -135,17 +136,17 @@ void thread_map_insert(l4_thread_t globalid, tcb_t* thr) {
 }
 
 /**
- * Create thread
+ * Initialize thread
  */
-tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
+tcb_t* thread_init(l4_thread_t globalid, utcb_t* utcb) {
 	tcb_t *thr;
-	int id;
 
-	id = GLOBALID_TO_TID(globalid);
 	thr = (tcb_t*) ktable_alloc(&thread_table);
 
-	if (!thr)
+	if (!thr) {
+		set_user_error(UE_OUT_OF_MEM);
 		return NULL;
+	}
 
 	thread_map_insert(globalid, thr);
 	thr->t_localid = 0x0;
@@ -164,26 +165,42 @@ tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
 
 	dbg_printf(DL_THREAD, "T: New thread: %t @[%p] \n", globalid, thr);
 
-	if (caller != NULL) {
-		/* Called from user thread */
-		if (id < THREAD_SYS)
-			return NULL;
+	return thr;
+}
 
-		thr->t_parent = caller;
-		if (caller->t_child) {
-			tcb_t* t = caller->t_child;
+/* Called from user thread */
+tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
+	tcb_t *thr;
+	int id;
 
-			while (t->t_sibling != 0)
-				t = t->t_sibling;
-			t->t_sibling = thr;
+	id = GLOBALID_TO_TID(globalid);
 
-			thr->t_localid = t->t_localid + (1 << 6);
-		} else {
-			/*That is first thread in child chain*/
-			caller->t_child = thr;
+	assert(caller);
 
-			thr->t_localid = (1 << 6);
-		}
+	if (id < THREAD_SYS
+			|| globalid == L4_ANYTHREAD
+			|| globalid == L4_ANYLOCALTHREAD) {
+		set_user_error(UE_TC_NOT_AVAILABLE);
+		return NULL;
+	}
+
+	thr = thread_init(globalid, utcb);
+	thr->t_parent = caller;
+
+	/* Place under */
+	if (caller->t_child) {
+		tcb_t* t = caller->t_child;
+
+		while (t->t_sibling != 0)
+			t = t->t_sibling;
+		t->t_sibling = thr;
+
+		thr->t_localid = t->t_localid + (1 << 6);
+	} else {
+		/*That is first thread in child chain*/
+		caller->t_child = thr;
+
+		thr->t_localid = (1 << 6);
 	}
 
 	return thr;
@@ -316,7 +333,11 @@ int schedule() {
 	static int cur_thread = 1;
 	int i = cur_thread;
 
-	if (!thread_isdispatched()) {
+	/*No available threads to schedule*/
+	assert(thread_count >= 2);
+
+	if (!thread_isdispatched()
+			&& thread_count > 2) {
 		/* Walk thread_map from i to i-1
 		 * while we dispatch some runnable thread
 		 * or we walk */

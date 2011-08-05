@@ -574,7 +574,7 @@ void memmanage_handler(void) {
 		}
 	}
 
-	dbg_panic_puts("Memory fault\n");
+	panic("Memory fault\n");
 }
 
 #ifdef CONFIG_KDB
