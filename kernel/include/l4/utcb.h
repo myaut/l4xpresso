@@ -7,14 +7,14 @@ Author: myaut
 
 @LICENSE
 */
-#ifndef UTCB_H_
-#define UTCB_H_
+#ifndef L4_UTCB_H_
+#define L4_UTCB_H_
 
 struct utcb {
 /*+0w*/
 	l4_thread_t t_globalid;
 	uint32_t	processor_no;
-	uint32_t 	user_defined_handle;	/*NOT used by handle*/
+	uint32_t 	user_defined_handle;	/*NOT used by kernel*/
 	l4_thread_t	t_pager;
 /*+4w*/
 	uint32_t	exception_handler;

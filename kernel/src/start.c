@@ -22,6 +22,7 @@ Author: myaut
 #include <types.h>
 #include <debug.h>
 #include <kdb.h>
+#include <ipc.h>
 #include <ktimer.h>
 #include <softirq.h>
 #include <syscall.h>
@@ -39,8 +40,6 @@ void debug_kdb_handler(void) {
 #endif
 
 extern void root_thread(void);
-
-extern int ipc_deliver(void);
 
 utcb_t 				root_utcb	__KIP;
 extern dbg_layer_t dbg_layer;

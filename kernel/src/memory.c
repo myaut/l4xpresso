@@ -9,6 +9,7 @@ Author: myaut
 */
 
 #include <memory.h>
+#include <error.h>
 #include <config.h>
 #include <debug.h>
 #include <thread.h>
@@ -95,12 +96,12 @@ memptr_t mempool_align(int mpid, memptr_t addr) {
 	case MP_MEMPOOL:
 	case MP_SRAM:
 	case MP_AHB_RAM:
-		return addr_align(addr, CONFIG_LEAST_FPAGE_SIZE);
+		return addr_align(addr, CONFIG_SMALLEST_FPAGE_SIZE);
 	case MP_DEVICES:
 		return addr & 0xFFFC0000;
 	}
 
-	return addr_align(addr, CONFIG_LEAST_FPAGE_SIZE);
+	return addr_align(addr, CONFIG_SMALLEST_FPAGE_SIZE);
 }
 
 
@@ -138,8 +139,8 @@ void memory_init() {
 		case MPT_USER_TEXT:
 		case MPT_DEVICES:
 		case MPT_AVAILABLE:
-			mem_desc[j].base = addr_align((memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) | i;
-			mem_desc[j].size = addr_align((memmap[i].end - memmap[i].start), CONFIG_LEAST_FPAGE_SIZE) |
+			mem_desc[j].base = addr_align((memmap[i].start), CONFIG_SMALLEST_FPAGE_SIZE) | i;
+			mem_desc[j].size = addr_align((memmap[i].end - memmap[i].start), CONFIG_SMALLEST_FPAGE_SIZE) |
 					memmap[i].tag;
 			j++;
 			break;

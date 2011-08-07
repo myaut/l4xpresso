@@ -11,6 +11,7 @@ Author: myaut
 #ifndef LINK_H_
 #define LINK_H_
 
+#include <config.h>
 #include <types.h>
 
 /*
@@ -46,7 +47,12 @@ extern void kernel_stack_addr(void);
 #define __KIP 			__attribute__ ((section(".kip")))
 #define __ISR_VECTOR	__attribute__ ((section(".isr_vector")))
 #define __KTABLE		__attribute__ ((section(".ktable")))
+
+#ifdef CONFIG_BITMAP_BITBAND
 #define __BITMAP		__attribute__ ((section(".bitmap")))
+#else
+#define __BITMAP
+#endif
 
 
 #define __USER_TEXT		__attribute__ ((section(".user_text")))
@@ -56,5 +62,6 @@ extern void kernel_stack_addr(void);
 
 #define __PACKED		__attribute__ ((packed))
 
+#define __INLINE 		static inline
 
 #endif /* LINK_H_ */

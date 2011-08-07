@@ -88,7 +88,7 @@ void sys_ipc(uint32_t* param1) {
 	if(to != L4_NILTHREAD) {
 		to_thr =  thread_by_globalid(to);
 
-		if(to_thr && to_thr->state == T_RECV_BLOCKED
+		if((to_thr && to_thr->state == T_RECV_BLOCKED)
 				|| to == caller->t_globalid ) {
 			/* To thread who waiting us or
 			 * send myself*/

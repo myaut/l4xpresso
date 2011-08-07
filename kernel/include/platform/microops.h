@@ -27,7 +27,8 @@ void spinlock_unlock(spinlock_t* sl);
 void atomic_set(atomic_t* atom, atomic_t newval);
 uint32_t atomic_get(atomic_t* atom);
 
-uint32_t test_and_set(uint32_t* atom);
+uint32_t test_and_set_word(uint32_t* word);
+uint32_t test_and_set_bit(uint32_t* word, int bitmask);
 
 /*IRQ disable/enable*/
 void irq_disable(void);

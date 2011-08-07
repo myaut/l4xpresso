@@ -21,4 +21,6 @@ typedef uint32_t l4_thread_t;
 
 #define NULL ((ptr_t) 0x0)
 
+#define ALIGNED(size, align)	(size / align) + ((size & (align - 1)) != 0)
+
 #endif /* TYPES_H_ */
