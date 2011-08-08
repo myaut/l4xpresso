@@ -19,6 +19,8 @@ Author: myaut
 #include <platform/debug_uart.h>
 #include <lpc/LPC17xx.h>
 
+#include <platform/irq.h>
+
 #include <types.h>
 #include <debug.h>
 #include <kdb.h>
@@ -29,6 +31,7 @@ Author: myaut
 #include <memory.h>
 #include <config.h>
 #include <l4/utcb.h>
+#include <systhread.h>
 
 extern dbg_handler_t dbg_handler;
 
@@ -39,17 +42,7 @@ void debug_kdb_handler(void) {
 }
 #endif
 
-extern void root_thread(void);
-
-utcb_t 				root_utcb	__KIP;
 extern dbg_layer_t dbg_layer;
-
-uint32_t sched_handler(void* data) {
-	dbg_puts("S: Scheduler\n");
-	schedule();
-
-	return 4096;
-}
 
 uint32_t test_panic(void* data) {
 	panic("Test panic");
@@ -58,8 +51,6 @@ uint32_t test_panic(void* data) {
 }
 
 int main(void) {
-	tcb_t* root;
-
 	dbg_uart_init(115200);
 	dbg_puts("\n\n---------------------------------------"
 			 "\nL4Xpresso hello!\n");
@@ -68,39 +59,27 @@ int main(void) {
 
 	dbg_layer = 0xFFFF;
 
+	irq_disable();
+
 	memory_init();
 	syscall_init();
 	thread_init_subsys();
-
 	ktimer_event_init();
 
 #	ifdef CONFIG_KDB
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
-	root = thread_init(TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
-	thread_space(root, TID_TO_GLOBALID(THREAD_ROOT), &root_utcb);
-	as_map_user(root->as);
-
-	thread_start((void*) &root_stack_end, root_thread, 0, root);
+	create_kernel_thread();
+	create_root_thread();
+	create_idle_thread();
 
 	mpu_enable(MPU_ENABLED);
 
-	ktimer_event_create(4096, sched_handler, NULL);
-	ktimer_event_create(4096, ipc_deliver, NULL);
-
-	ktimer_event_create(16384, test_panic, NULL);
-
-	/* Here is main kernel thread
-	 * we will fall here if somebody will
-	 * schedule softirq and try to switch context
-	 *
-	 * If nothing to execute than sleep until next
-	 * interrupt arrives (e.g. from kernel timer)*/
-	while(1) {
-		if(!softirq_execute())
-				wait_for_interrupt();
-	}
+	irq_enable();
+	/* Wait. After first interrupt (i.e. from timer),
+	 * we will jump to thread*/
+	while(1);
 }
 
 void init_zero_seg(uint32_t* dst, uint32_t* dst_end) {

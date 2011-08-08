@@ -13,6 +13,7 @@ Author: myaut
 
 #include <softirq.h>
 #include <thread.h>
+#include <sched.h>
 
 /*
  * TODO: current implementation is highly ineffective
@@ -86,7 +87,7 @@ __INLINE int irq_number() {
 	void name() {											\
 		irq_save(&current->ctx);							\
 		sub();												\
-		thread_switch();									\
+		schedule();											\
 		irq_return(&current->ctx);							\
 	}
 

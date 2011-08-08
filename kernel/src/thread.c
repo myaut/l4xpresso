@@ -53,8 +53,6 @@ int thread_count;
  */
 
 volatile tcb_t* current; 			// Currently on CPU
-volatile tcb_t* kernel; 			// Kernel thread
-volatile tcb_t* next_current; 		// Next to be dispatched on CPU
 
 /*KIP declarations*/
 fpage_t *kip_fpage, *kip_extra_fpage;
@@ -65,14 +63,6 @@ void thread_init_subsys() {
 	fpage_t* last = NULL;
 
 	ktable_init(&thread_table);
-
-	/* Pre-allocate system threads and set kernel as dispatched*/
-	kernel = thread_init(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
-	/* Set EXC_RETURN and CONTROL reg for kernel */
-	kernel->ctx.ret = 0xFFFFFFF9;
-	kernel->ctx.ctl = 0x0;
-
-	current = kernel;
 
 	kip.thread_info.s.system_base = THREAD_SYS;
 	kip.thread_info.s.user_base = THREAD_USER;
@@ -232,26 +222,35 @@ void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb) {
 		map_area(thr->as, thr->as, (memptr_t) utcb, sizeof(utcb_t), GRANT, 1);
 }
 
-void thread_start(void* sp, void* pc, uint32_t xpsr, tcb_t *thr) {
+void thread_init_ctx(void* sp, void* pc, tcb_t *thr) {
 	/* Reserve 8 words for fake context */
 	sp -= 8 * sizeof(uint32_t);
 	thr->ctx.sp = (uint32_t) sp;
 
-	/*Set EXC_RETURN and CONTROL for user thread*/
-	thr->ctx.ret = 0xFFFFFFFD;
-	thr->ctx.ctl = 0x3;
+	/* Set EXC_RETURN and CONTROL for thread and create initial stack for it
+	 * When thread is dispatched, on first context switch */
+	if(GLOBALID_TO_TID(thr->t_globalid) >= THREAD_ROOT) {
+		thr->ctx.ret = 0xFFFFFFFD;
+		thr->ctx.ctl = 0x3;
 
-	/* Stack allocated, now use fake pc, lr, xpsr */
-	((uint32_t*) sp)[REG_R0] = (uint32_t) &kip;
-	((uint32_t*) sp)[REG_R1] = (uint32_t) thr->utcb;
+		((uint32_t*) sp)[REG_R0] = 0x0;
+		((uint32_t*) sp)[REG_R1] = 0x0;
+	}
+	else {
+		thr->ctx.ret = 0xFFFFFFF9;
+		thr->ctx.ctl = 0x0;
+
+
+		((uint32_t*) sp)[REG_R0] = (uint32_t) &kip;
+		((uint32_t*) sp)[REG_R1] = (uint32_t) thr->utcb;
+	}
+
 	((uint32_t*) sp)[REG_R2] = 0x0;
 	((uint32_t*) sp)[REG_R3] = 0x0;
 	((uint32_t*) sp)[REG_R12] = 0x0;
 	((uint32_t*) sp)[REG_LR] = 0xFFFFFFFF;
 	((uint32_t*) sp)[REG_PC] = (uint32_t) pc;
-	((uint32_t*) sp)[REG_xPSR] = xpsr | 0x1000000; /* Thumb bit on*/
-
-	thr->state = T_RUNNABLE;
+	((uint32_t*) sp)[REG_xPSR] = 0x1000000; /* Thumb bit on*/
 }
 
 /*
@@ -267,23 +266,8 @@ tcb_t* thread_by_globalid(l4_thread_t globalid) {
 		return thread_map[idx];
 }
 
-uint32_t thread_isdispatched() {
-	return (next_current != NULL);
-}
-
 int thread_isrunnable(tcb_t* thr) {
 	return thr->state == T_RUNNABLE;
-}
-
-int thread_dispatch(tcb_t* thr) {
-	if (thr->state == T_RUNNABLE) {
-		dbg_printf(DL_SCHEDULE, "TCB: dispatched %t\n", thr->t_globalid);
-		next_current = (volatile tcb_t*) thr;
-
-		return 1;
-	}
-
-	return 0;
 }
 
 tcb_t* thread_current() {
@@ -296,64 +280,13 @@ int thread_ispriviliged(tcb_t* thread) {
 
 /* Switch context
  * */
-void thread_switch() {
-	if (!softirq_isscheduled()) {
-		/*No SOFTIRQs is scheduled, we can go to userspace now*/
+void thread_switch(tcb_t* thr) {
+	assert(thr);
+	assert(thread_isrunnable(thr));
 
-		/*	Check if current is still runnable
-		 *	(not blocked and timeslice not exhausted)
-		 *
-		 *	kernel is always inactive, so if we in kernel now
-		 *	we will try to switch context too*/
-		if (!thread_isrunnable((tcb_t*) current)) {
-			if(!next_current)
-				schedule();
-
-			if (next_current) {
-				/*We already scheduled a thread, simply switch to it*/
-				dbg_printf(DL_THREAD, "TCB: switch %t -> %t\n", current->t_globalid,
-						next_current->t_globalid);
-				current = next_current;
-				next_current = NULL;
-
-				if (current->as)
-					as_setup_mpu(current->as);
-			} else {
-				/* Fall into kernel, than to IDLE state (WFI)*/
-				current = kernel;
-			}
-		}
-	} else {
-		/*Jump to kernel*/
-		current = kernel;
-	}
-}
-
-int schedule() {
-	static int cur_thread = 1;
-	int i = cur_thread;
-
-	/*No available threads to schedule*/
-	assert(thread_count >= 2);
-
-	if (!thread_isdispatched()
-			&& thread_count > 2) {
-		/* Walk thread_map from i to i-1
-		 * while we dispatch some runnable thread
-		 * or we walk */
-		do {
-			++cur_thread;	/*Select next thread*/
-			if(cur_thread == thread_count)
-				cur_thread = 1;
-
-			if(thread_dispatch(thread_map[cur_thread])) {
-				return 1;
-			}
-
-		} while(i != cur_thread);
-	}
-
-	return 0;
+	current = thr;
+	if (current->as)
+		as_setup_mpu(current->as);
 }
 
 #ifdef CONFIG_KDB
@@ -361,9 +294,7 @@ int schedule() {
 char* kdb_get_thread_type(tcb_t* thr) {
 	int id = GLOBALID_TO_TID(thr->t_globalid);
 
-	if (id == THREAD_IDLE)
-		return "IDLE";
-	else if (id == THREAD_KERNEL)
+	if (id == THREAD_KERNEL)
 		return "KERN";
 	else if (id == THREAD_ROOT)
 		return "ROOT";

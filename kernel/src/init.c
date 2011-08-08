@@ -50,7 +50,7 @@ extern void (* const g_pfnVectors[])(void);
 __ISR_VECTOR
 void (* const g_pfnVectors[])(void) = {
 	// Core Level - CM3
-	&kernel_stack_addr, 					// The initial stack pointer
+	&init_stack_addr, 					// The initial stack pointer
 	__l4_start,							// The reset handler
 	nmi_handler,						// The NMI handler
 	hard_fault_handler,						// The hard fault handler

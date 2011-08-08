@@ -56,7 +56,7 @@ __INLINE int bitmap_get_bit(bitmap_cursor_t cursor) {
 }
 
 __INLINE int bitmap_test_and_set_bit(bitmap_cursor_t cursor) {
-	return test_and_set_word(cursor);
+	return test_and_set_word((uint32_t*) cursor);
 }
 
 #else

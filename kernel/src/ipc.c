@@ -100,8 +100,8 @@ void sys_ipc(uint32_t* param1) {
 
 			dbg_printf(DL_IPC, "IPC: %t thread start\n", to);
 
-			thread_start((void*) ipc_read_mr(caller, 2),
-							(void*) ipc_read_mr(caller, 1), 0, to_thr);
+			thread_init_ctx((void*) ipc_read_mr(caller, 2),
+							(void*) ipc_read_mr(caller, 1), to_thr);
 			caller->state = T_RUNNABLE;
 		}
 		else  {

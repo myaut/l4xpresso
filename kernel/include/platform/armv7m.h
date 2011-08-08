@@ -14,9 +14,23 @@ Author: myaut
 #include <types.h>
 
 #define __ASM 	__asm
+#define __INLINE static inline
 
-/*Wait for interrupt*/
-#define wait_for_interrupt() __ASM volatile ("wfi")
+__INLINE void wait_for_interrupt() {
+	__ASM volatile ("wfi");
+}
+
+__INLINE uint32_t read_msp() {
+	uint32_t result;
+
+	__ASM volatile ("mrs r0, msp\n"
+					"mov %0, r0"
+					: "=r"(result)
+					:
+					: "r0");
+
+	return result;
+}
 
 enum register_stack_t {
 	/*Saved by hardware*/

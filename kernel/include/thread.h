@@ -94,20 +94,15 @@ struct tcb {
 };
 typedef struct tcb tcb_t;
 
-typedef enum  { CTX_KERNEL, CTX_USER } thread_context_t;
-
 void thread_init_subsys();
 
-uint32_t thread_isdispatched();
 tcb_t* thread_by_globalid(l4_thread_t globalid);
 
 tcb_t* thread_init(l4_thread_t globalid, utcb_t* utcb);
 tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb);
 void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb);
-void thread_start(void* sp, void* pc, uint32_t xpsr, tcb_t *thr);
-
-int thread_dispatch(tcb_t* thr);
-void thread_switch();
+void thread_init_ctx(void* sp, void* pc, tcb_t *thr);
+void thread_switch(tcb_t* thr);
 
 int thread_ispriviliged(tcb_t* thr);
 tcb_t* thread_current();

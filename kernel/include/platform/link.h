@@ -28,6 +28,9 @@ extern uint32_t kernel_bss_end;
 extern uint32_t kernel_ahb_start;
 extern uint32_t kernel_ahb_end;
 
+extern uint32_t init_stack_addr;
+extern uint32_t kernel_stack_addr;
+
 extern uint32_t user_text_start;
 extern uint32_t user_text_end;
 extern uint32_t user_data_start;
@@ -40,8 +43,6 @@ extern uint32_t root_stack_end;
 
 extern uint32_t kip_start;
 extern uint32_t kip_end;
-
-extern void kernel_stack_addr(void);
 
 #define __BSS 			__attribute__ ((section(".bss")))
 #define __KIP 			__attribute__ ((section(".kip")))

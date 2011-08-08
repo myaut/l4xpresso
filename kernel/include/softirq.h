@@ -37,7 +37,6 @@ typedef struct {
 
 void softirq_register(softirq_type_t type, softirq_handler_t handler);
 void softirq_schedule(softirq_type_t type);
-int softirq_isscheduled();
 int softirq_execute(void);
 
 #endif /* SOFTIRQ_H_ */

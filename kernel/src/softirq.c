@@ -14,10 +14,9 @@ Author: myaut
 #include <softirq.h>
 #include <config.h>
 #include <debug.h>
+#include <systhread.h>
 
 static softirq_t softirq[NR_SOFTIRQ];
-static atomic_t softirq_scheduled_flag = 0;
-
 
 void softirq_register(softirq_type_t type, softirq_handler_t handler) {
 	softirq[type].handler 	= handler;
@@ -26,10 +25,7 @@ void softirq_register(softirq_type_t type, softirq_handler_t handler) {
 
 void softirq_schedule(softirq_type_t type) {
 	atomic_set(&(softirq[type].schedule), 1);
-	atomic_set(&softirq_scheduled_flag, 1);
-}
-int softirq_isscheduled() {
-	return atomic_get(&softirq_scheduled_flag) == 1;
+	set_kernel_state(T_RUNNABLE);
 }
 
 char* softirq_names[NR_SOFTIRQ] = {
@@ -40,7 +36,7 @@ char* softirq_names[NR_SOFTIRQ] = {
 };
 
 int softirq_execute(void) {
-	uint32_t schedule = 0, executed = 0;
+	uint32_t softirq_schedule = 0, executed = 0;
 	int i;
 
 	for(i = 0; i < NR_SOFTIRQ; ++i) {
@@ -59,9 +55,9 @@ int softirq_execute(void) {
 	irq_disable();
 
 	for(i = 0; i < NR_SOFTIRQ; ++i)
-		schedule |= softirq[i].schedule;
+		softirq_schedule |= softirq[i].schedule;
 
-	atomic_set(&softirq_scheduled_flag, schedule);
+	set_kernel_state((softirq_schedule)? T_RUNNABLE : T_INACTIVE);
 	irq_enable();
 
 	return executed;
@@ -71,8 +67,6 @@ int softirq_execute(void) {
 
 void kdb_dump_softirq(void) {
 	int i;
-
-	dbg_printf(DL_KDB, "SOFTIRQ %s\n", atomic_get(&softirq_scheduled_flag)? "scheduled" : "not scheduled");
 
 	for(i = 0; i < NR_SOFTIRQ; ++i) {
 		dbg_printf(DL_KDB, "%32s %s\n", softirq_names[i],
