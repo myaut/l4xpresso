@@ -51,6 +51,12 @@ uint32_t sched_handler(void* data) {
 	return 4096;
 }
 
+uint32_t test_panic(void* data) {
+	panic("Test panic");
+
+	return 0;
+}
+
 int main(void) {
 	tcb_t* root;
 
@@ -60,7 +66,7 @@ int main(void) {
 
 	// dbg_layer = DL_BASIC | DL_KDB | DL_THREAD;
 
-	dbg_layer = ~(DL_KTABLE | DL_KTIMER);
+	dbg_layer = 0xFFFF;
 
 	memory_init();
 	syscall_init();
@@ -82,6 +88,8 @@ int main(void) {
 
 	ktimer_event_create(4096, sched_handler, NULL);
 	ktimer_event_create(4096, ipc_deliver, NULL);
+
+	ktimer_event_create(16384, test_panic, NULL);
 
 	/* Here is main kernel thread
 	 * we will fall here if somebody will

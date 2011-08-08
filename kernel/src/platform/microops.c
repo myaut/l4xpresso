@@ -120,19 +120,3 @@ uint32_t test_and_set_bit(uint32_t* word, int bitmask) {
 	return result  == 0;
 }
 
-void irq_disable(void) {
-	__ASM volatile ("cpsid i");
-}
-
-void irq_enable(void) {
-	__ASM volatile ("cpsie i");
-}
-
-int irq_number() {
-	int irqno;
-
-	__ASM volatile ( "mrs r0, ipsr\n"
-					  "mov r0, %0" : "=r" (irqno) : : "r0");
-
-	return irqno;
-}

@@ -12,7 +12,7 @@ Author: myaut
 
 #include <debug.h>
 #include <ktimer.h>
-#include <ktable.h>
+#include <lib/ktable.h>
 #include <softirq.h>
 #include <platform/armv7m.h>
 #include <platform/microops.h>
@@ -95,6 +95,8 @@ void kdb_show_ktimer() {
 
 inline void ktimer_event_recalc(ktimer_event_t* event, uint32_t new_delta) {
 	while(event) {
+		dbg_printf(DL_KTIMER, "KTE: Recalculated event %p D=%d -> %d\n",
+										event, event->delta, event->delta - new_delta);
 		event->delta -= new_delta;
 		event = event->next;
 	}
@@ -141,7 +143,7 @@ int ktimer_event_schedule(uint32_t ticks, ktimer_event_t* kte) {
 		 * */
 		next_event = event_queue;
 
-		if(ticks > event_queue->delta) {
+		if(ticks >= event_queue->delta) {
 			do {
 				event = next_event;
 				etime += event->delta;
@@ -159,7 +161,7 @@ int ktimer_event_schedule(uint32_t ticks, ktimer_event_t* kte) {
 		else {
 			/* Event should be scheduled before earlier event */
 			dbg_printf(DL_KTIMER, "KTE: Scheduled early event %p with T=%d\n",
-								kte, event, next_event, delta, ticks);
+								kte, ticks);
 
 			event_queue = kte;
 			delta = ticks;

@@ -12,7 +12,7 @@ Author: myaut
 #define DEBUG_UART_H_
 
 #include <types.h>
-#include <fifo.h>
+#include <lib/fifo.h>
 
 #define IER_RBR		0x01
 #define IER_THRE	0x02

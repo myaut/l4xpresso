@@ -8,6 +8,7 @@
 #include <error.h>
 #include <thread.h>
 #include <debug.h>
+#include <platform/irq.h>
 #include <platform/debug_uart.h>
 
 extern volatile tcb_t* caller;
@@ -18,6 +19,9 @@ void set_user_error(enum user_error_t error) {
 
 		caller->utcb->error_code = error;
 	}
+	else {
+		panic("User-level error during kernel call!");
+	}
 }
 
 void panic(char* panicmsg) {
@@ -25,6 +29,9 @@ void panic(char* panicmsg) {
 
 	irq_disable();
 	dbg_puts(panicmsg);
+	dbg_puts("\n\nCall stack:");
+
+
 
 	while(1);
 }

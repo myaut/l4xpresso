@@ -9,7 +9,7 @@
  */
 
 #include <thread.h>
-#include <ktable.h>
+#include <lib/ktable.h>
 #include <config.h>
 #include <error.h>
 #include <debug.h>

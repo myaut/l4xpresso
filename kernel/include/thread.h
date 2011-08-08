@@ -12,7 +12,7 @@ Author: myaut
 #define THREAD_H_
 
 #include <types.h>
-#include <ktable.h>
+#include <lib/ktable.h>
 #include <memory.h>
 #include <kip.h>
 #include <config.h>

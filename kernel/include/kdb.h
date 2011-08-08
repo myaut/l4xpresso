@@ -11,7 +11,7 @@ Author: myaut
 #ifndef KDB_H_
 #define KDB_H_
 
-#include <ktable.h>
+#include <lib/ktable.h>
 
 /*Simple kernel debugger*/
 int kdb_handler(char c);

@@ -22,7 +22,22 @@ Author: myaut
  * */
 
 
-#define irq_disable() __ASM volatile("cpsid e");
+__INLINE void irq_disable(void) {
+	__ASM volatile ("cpsid i");
+}
+
+__INLINE void irq_enable(void) {
+	__ASM volatile ("cpsie i");
+}
+
+__INLINE int irq_number() {
+	int irqno;
+
+	__ASM volatile ( "mrs r0, ipsr\n"
+					  "mov r0, %0" : "=r" (irqno) : : "r0");
+
+	return irqno;
+}
 
 /*
  * irq_save()

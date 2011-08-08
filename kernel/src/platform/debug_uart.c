@@ -10,7 +10,7 @@ Author: myaut
 
 #include <platform/debug_uart.h>
 #include <config.h>
-#include <fifo.h>
+#include <lib/fifo.h>
 #include <softirq.h>
 
 static struct dbg_uart_t dbg_uart;
@@ -179,8 +179,8 @@ void dbg_sync_putchar(char chr) {
 	if(chr == '\n')
 		dbg_sync_putchar('\r');
 
-	while(!(LPC_UART3->IIR & 0x2));
 	LPC_UART3->THR = chr;
+	while(!(LPC_UART3->IIR & 0x2));
 }
 
 void dbg_start_panic()

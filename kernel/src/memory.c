@@ -13,7 +13,7 @@ Author: myaut
 #include <config.h>
 #include <debug.h>
 #include <thread.h>
-#include <ktable.h>
+#include <lib/ktable.h>
 
 #include <kip.h>
 

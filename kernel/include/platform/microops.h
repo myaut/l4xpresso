@@ -30,10 +30,4 @@ uint32_t atomic_get(atomic_t* atom);
 uint32_t test_and_set_word(uint32_t* word);
 uint32_t test_and_set_bit(uint32_t* word, int bitmask);
 
-/*IRQ disable/enable*/
-void irq_disable(void);
-void irq_enable(void);
-
-int irq_number();
-
 #endif /* MICOROPS_H_ */

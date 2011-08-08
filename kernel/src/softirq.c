@@ -9,6 +9,7 @@ Author: myaut
 */
 
 #include <types.h>
+#include <platform/irq.h>
 #include <platform/microops.h>
 #include <softirq.h>
 #include <config.h>
