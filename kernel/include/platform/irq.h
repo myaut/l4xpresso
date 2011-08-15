@@ -14,7 +14,7 @@ Author: myaut
 #include <softirq.h>
 #include <thread.h>
 #include <sched.h>
-
+#include <platform/link.h>
 /*
  * TODO: current implementation is highly ineffective
  * 1. It is does not support Nested Interrupts (because interrupt nesting
@@ -69,8 +69,6 @@ __INLINE int irq_number() {
 	__ASM volatile("cpsie i");									\
 	__ASM volatile("bx lr");
 
-#define __IRQ __attribute__ ((naked))
-
 /*
  * Context switching is doing on interrupt return
  * We check if nobody schedules actions in kernel (SOFTIRQs)
@@ -83,7 +81,7 @@ __INLINE int irq_number() {
 
 
 #define IRQ_HANDLER(name, sub) 								\
-	void name() __IRQ;										\
+	void name() __NAKED;									\
 	void name() {											\
 		irq_save(&current->ctx);							\
 		sub();												\

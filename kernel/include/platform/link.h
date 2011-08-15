@@ -44,6 +44,8 @@ extern uint32_t root_stack_end;
 extern uint32_t kip_start;
 extern uint32_t kip_end;
 
+extern uint32_t* kernel_stack_end_ptr;
+
 #define __BSS 			__attribute__ ((section(".bss")))
 #define __KIP 			__attribute__ ((section(".kip")))
 #define __ISR_VECTOR	__attribute__ ((section(".isr_vector")))
@@ -55,7 +57,6 @@ extern uint32_t kip_end;
 #define __BITMAP
 #endif
 
-
 #define __USER_TEXT		__attribute__ ((section(".user_text")))
 #define __USER_DATA		__attribute__ ((section(".user_data")))
 #define __USER_BSS		__attribute__ ((section(".user_bss")))
@@ -64,5 +65,7 @@ extern uint32_t kip_end;
 #define __PACKED		__attribute__ ((packed))
 
 #define __INLINE 		static inline
+
+#define __NAKED __attribute__ ((naked))
 
 #endif /* LINK_H_ */

@@ -9,7 +9,7 @@ Author: myaut
 */
 
 #include <lpc/LPC17xx.h>
-#include <stdarg.h>
+#include <lib/stdarg.h>
 #include <debug.h>
 #include <platform/debug_uart.h>
 
@@ -80,14 +80,19 @@ void dbg_put_dec(const uint32_t val, const int width, const char pad) {
     } while (divisor /= 10);
 }
 
+
 void dbg_printf(dbg_layer_t layer, char* fmt, ...) {
 	va_list va;
+	va_start(va, fmt);
+
+	dbg_vprintf(layer, fmt, va);
+}
+
+void dbg_vprintf(dbg_layer_t layer, char* fmt, va_list va) {
 	int mode = 0;	/*0 for usual char, 1 for specifiers*/
 	int width = 0;
 	char pad = ' ';
 	int size = 16;
-
-	va_start(va, fmt);
 
 	if(layer != DL_EMERG && !(dbg_layer & layer))
 		return;

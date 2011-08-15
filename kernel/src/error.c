@@ -5,13 +5,23 @@
  *      Author: myaut
  */
 
+#define __PANIC_VAR static
+
 #include <error.h>
 #include <thread.h>
+#include <config.h>
 #include <debug.h>
 #include <platform/irq.h>
+#include <platform/armv7m.h>
+#include <platform/link.h>
 #include <platform/debug_uart.h>
+#include <lib/stdarg.h>
 
 extern volatile tcb_t* caller;
+
+const char* reg_names[13] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+		"r8", "r9", "r10", "r11", "r12"};
+const char* spec_reg_names[6] = {"PSR", "MSP", "PSP", "BASEPRI", "FAULTMASK", "CONTROL"};
 
 void set_user_error(enum user_error_t error) {
 	if(caller) {
@@ -20,18 +30,58 @@ void set_user_error(enum user_error_t error) {
 		caller->utcb->error_code = error;
 	}
 	else {
-		panic("User-level error during kernel call!");
+		panic("User-level error %d during in-kernel call!", error);
 	}
 }
 
-void panic(char* panicmsg) {
+#if 0
+void panic_dump_regs() {
+	int reg;
+
+	dbg_puts("\n\nRegisters:\n");
+
+	for(reg = 0; reg < 13; ++reg) {
+		dbg_printf(DL_EMERG, "%3s: %p ", reg_names[reg], panic_regs[reg]);
+		if(reg % 4 == 0) dbg_putchar('\n');
+	}
+
+	for(reg = 0; reg < 6; ++reg) {
+		dbg_printf(DL_EMERG, "%s: %p\n", spec_reg_names[reg], panic_spec_regs[reg]);
+	}
+}
+#endif
+
+#ifdef CONFIG_PANIC_DUMP_STACK
+
+void panic_dump_stack() {
+	uint32_t* current_sp = (uint32_t*) read_msp();
+	int word = 0;
+
+	dbg_puts("\n\nStack dump:\n");
+
+	while(current_sp < kernel_stack_end_ptr) {
+		dbg_printf(DL_EMERG, "%p ", *(++current_sp));
+
+		if(++word % 8 == 0)
+			dbg_putchar('\n');
+	}
+}
+#endif
+
+void panic_impl(char* fmt, ...) {
+	va_list va;
+	va_start(va, fmt);
+
 	dbg_start_panic();
 
 	irq_disable();
-	dbg_puts(panicmsg);
-	dbg_puts("\n\nCall stack:");
+	dbg_vprintf(DL_EMERG, fmt, va);
 
+#if 0
+	panic_dump_regs();
+#endif
 
+	panic_dump_stack();
 
 	while(1);
 }
@@ -39,8 +89,6 @@ void panic(char* panicmsg) {
 void assert_impl(int cond, const char* condstr, const char* funcname) {
 	if(!cond) {
 		/*Write to buffer*/
-		dbg_printf(DL_EMERG, "\nKernel assertion %s @%s\n", condstr, funcname);
-
-		panic("Assertion failed");
+		panic("Assertion %s failed @%s\n", condstr, funcname);
 	}
 }

@@ -37,4 +37,6 @@ enum {
 
 #define CONFIG_BITMAP_BITBAND
 
+#define CONFIG_PANIC_DUMP_STACK
+
 #endif /* CONFIG_H_ */

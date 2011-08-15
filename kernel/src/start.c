@@ -20,7 +20,7 @@ Author: myaut
 #include <lpc/LPC17xx.h>
 
 #include <platform/irq.h>
-
+#include <error.h>
 #include <types.h>
 #include <debug.h>
 #include <kdb.h>
@@ -70,16 +70,19 @@ int main(void) {
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
+	create_idle_thread();
 	create_kernel_thread();
 	create_root_thread();
-	create_idle_thread();
 
 	mpu_enable(MPU_ENABLED);
 
+	ktimer_event_create(16384, test_panic, NULL);
+
 	irq_enable();
+
 	/* Wait. After first interrupt (i.e. from timer),
 	 * we will jump to thread*/
-	while(1);
+	wait_for_interrupt();
 }
 
 void init_zero_seg(uint32_t* dst, uint32_t* dst_end) {

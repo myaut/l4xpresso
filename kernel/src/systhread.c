@@ -24,6 +24,8 @@ static tcb_t* root;
 extern void root_thread(void);
 utcb_t root_utcb	__KIP;
 
+uint32_t* kernel_stack_end_ptr = 0;
+
 void kernel_thread();
 void idle_thread();
 
@@ -35,14 +37,15 @@ void create_root_thread() {
 	thread_init_ctx((void*) &root_stack_end, root_thread, root);
 
 	sched_slot_dispatch(SSI_ROOT_THREAD, root);
+	root->state = T_RUNNABLE;
 }
 
 void create_kernel_thread() {
 	/* Reserve 24 words (16 for context and 8 extra-words) for IDLE stack*/
-	uint32_t kernel_sp = ((uint32_t) &kernel_stack_addr - 96) & 0xFFFFFFFC;
+	kernel_stack_end_ptr = ((uint32_t) &kernel_stack_addr - 96) & 0xFFFFFFFC;
 
 	kernel = thread_init(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
-	thread_init_ctx((void*) kernel_sp, kernel_thread, kernel);
+	thread_init_ctx((void*) kernel_stack_end_ptr, kernel_thread, kernel);
 
 	sched_slot_dispatch(SSI_SOFTIRQ, kernel);
 }

@@ -12,6 +12,7 @@ Author: myaut
 #define DEBUG_H_
 
 #include <types.h>
+#include <lib/stdarg.h>
 
 #ifndef DEBUG
 
@@ -22,9 +23,6 @@ Author: myaut
 #define dbg_puts(s)
 
 #else
-
-#define DEBUG_OUTPUT_BUFFER_SIZE 64
-
 
 typedef enum {
 	DL_EMERG	= 0x0000,
@@ -44,6 +42,7 @@ void dbg_putchar(uint8_t chr);
 uint8_t dbg_getchar();
 void dbg_puts(char* str);
 void dbg_printf(dbg_layer_t layer, char* fmt, ...);
+void dbg_vprintf(dbg_layer_t layer, char* fmt, va_list va);
 
 #endif
 

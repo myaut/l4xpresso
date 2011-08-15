@@ -233,16 +233,15 @@ void thread_init_ctx(void* sp, void* pc, tcb_t *thr) {
 		thr->ctx.ret = 0xFFFFFFFD;
 		thr->ctx.ctl = 0x3;
 
-		((uint32_t*) sp)[REG_R0] = 0x0;
-		((uint32_t*) sp)[REG_R1] = 0x0;
+		((uint32_t*) sp)[REG_R0] = (uint32_t) &kip;
+		((uint32_t*) sp)[REG_R1] = (uint32_t) thr->utcb;
 	}
 	else {
 		thr->ctx.ret = 0xFFFFFFF9;
 		thr->ctx.ctl = 0x0;
 
-
-		((uint32_t*) sp)[REG_R0] = (uint32_t) &kip;
-		((uint32_t*) sp)[REG_R1] = (uint32_t) thr->utcb;
+		((uint32_t*) sp)[REG_R0] = 0x0;
+		((uint32_t*) sp)[REG_R1] = 0x0;
 	}
 
 	((uint32_t*) sp)[REG_R2] = 0x0;
@@ -298,6 +297,8 @@ char* kdb_get_thread_type(tcb_t* thr) {
 		return "KERN";
 	else if (id == THREAD_ROOT)
 		return "ROOT";
+	else if (id == THREAD_IDLE)
+		return "IDLE";
 	else if (id >= THREAD_USER)
 		return "[USR]";
 	else if (id >= THREAD_SYS)
