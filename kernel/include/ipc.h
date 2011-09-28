@@ -14,6 +14,8 @@ Author: myaut
 #define IPC_TI_MAP_GRANT 0x8
 #define IPC_TI_GRANT 	 0x2
 
+#define IPC_MR_COUNT	16
+
 typedef union {
 	struct {
 		uint16_t	label;

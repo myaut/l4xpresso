@@ -69,8 +69,8 @@ void thread_init_subsys() {
 
 	/* Create KIP fpages
 	 * last is ignored, because kip fpages is aligned*/
-	create_fpages_ext(-1, NULL, (memptr_t) &kip, sizeof(kip_t), &kip_fpage, &last);
-	create_fpages_ext(-1, NULL, (memptr_t) kip_extra, CONFIG_KIP_EXTRA_SIZE, &kip_extra_fpage, &last);
+	assign_fpages_ext(-1, NULL, (memptr_t) &kip, sizeof(kip_t), &kip_fpage, &last);
+	assign_fpages_ext(-1, NULL, (memptr_t) kip_extra, CONFIG_KIP_EXTRA_SIZE, &kip_extra_fpage, &last);
 }
 
 extern tcb_t* caller;
@@ -134,7 +134,7 @@ tcb_t* thread_init(l4_thread_t globalid, utcb_t* utcb) {
 	thr = (tcb_t*) ktable_alloc(&thread_table);
 
 	if (!thr) {
-		set_user_error(UE_OUT_OF_MEM);
+		set_caller_error(UE_OUT_OF_MEM);
 		return NULL;
 	}
 
@@ -170,7 +170,7 @@ tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
 	if (id < THREAD_SYS
 			|| globalid == L4_ANYTHREAD
 			|| globalid == L4_ANYLOCALTHREAD) {
-		set_user_error(UE_TC_NOT_AVAILABLE);
+		set_caller_error(UE_TC_NOT_AVAILABLE);
 		return NULL;
 	}
 

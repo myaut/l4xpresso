@@ -13,6 +13,7 @@ Author: myaut
 
 #include <config.h>
 #include <types.h>
+#include <fpage.h>
 #include <platform/link.h>
 
 /*
@@ -22,47 +23,12 @@ Author: myaut
 
 typedef enum { MAP, GRANT, UNMAP } map_action_t;
 
-struct fpage;
-
 typedef struct {
 	uint32_t	as_spaceid;         /*!Space Identifier*/
 	struct fpage* 	first;          /*!head of fpage list*/
 
 	struct fpage* 	lru;			/*!LRU page, will be mapped as MAP_ALWAYS*/
 } as_t;
-
-#define FPAGE_ALWAYS    0x1     /*!Fpage is always mapped in mpu*/
-#define FPAGE_CLONE     0x2     /*!Fpage is mapped from other as*/
-#define FPAGE_MAPPED    0x4     /*!Fpage is mapped with MAP (unavailable in original AS)*/
-
-/**
- * Flexible page (fpage_t)
- * 
- * as_next - next in address space chain
- * map_next - next in mappings chain (cycle list)
- *
- * base - base address of fpage
- * shift - size of fpage == 1 << shift
- * rwx - access bits
- * mpid - id of memory pool
- * flags - flags*/
-struct fpage {
-	as_t*	as;
-	struct fpage* as_next;
-	struct fpage* map_next;
-
-	union {
-		struct {
-			uint32_t base;
-			uint32_t mpid : 6;
-			uint32_t flags : 6;
-			uint32_t shift : 16;
-			uint32_t rwx : 4;
-		} fpage;
-		uint32_t raw[2];
-	};
-};
-typedef struct fpage fpage_t;
 
 /**
  * Memory pool represents area of physical address space
@@ -147,20 +113,11 @@ typedef enum {
 
 void memory_init();
 
+memptr_t mempool_align(int mpid, memptr_t addr);
 int mempool_search(memptr_t base, size_t size);
 mempool_t* mempool_getbyid(int mpid);
 
-void create_fpage_chain(memptr_t base, size_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast);
-int create_fpages(as_t* as, memptr_t base, size_t size);
-int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
-		fpage_t** plast);
-
-void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last);
-void insert_fpage_to_as(as_t* as, fpage_t* fpage);
-
 int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged);
-int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action);
-int unmap_fpage(as_t* as, fpage_t* fpage);
 
 as_t* as_create(uint32_t as_spaceid);
 void as_setup_mpu(as_t* as);

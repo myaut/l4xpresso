@@ -10,6 +10,7 @@ Author: myaut
 
 #include <platform/armv7m.h>
 #include <debug.h>
+#include <error.h>
 #include <types.h>
 #include <thread.h>
 #include <memory.h>
@@ -32,43 +33,50 @@ void ipc_write_mr(tcb_t* to, int i, uint32_t data) {
 	else to->ctx.regs[i] = data;
 }
 
-void ipc(tcb_t* from, tcb_t* to) {
+void do_ipc(tcb_t* from, tcb_t* to) {
 	ipc_msg_tag_t tag;
-	ipc_typed_item	ti;
-	int i, t, j;
-	uint32_t tm;		/* typed item extra word*/
+	ipc_typed_item	typed_item;
+	int untyped_idx, typed_idx, typed_item_idx;
+	int typed_last, untyped_last;
+	uint32_t typed_data;		/* typed item extra word*/
 
-	tag.raw = from->ctx.regs[0];
+	/*Copy tag of message*/
+	tag.raw = ipc_read_mr(from, 0);
+	untyped_last = tag.s.n_untyped + 1;
+	typed_last = untyped_last + tag.s.n_typed;
 
-	to->ctx.regs[0] = tag.s.label << 16;
-
-	/* First 8 MRs are located on r4-r11,
-	 * last 8 MRs - in UTCB
-	 * */
-
-	/*Copy untyped words*/
-	for(i = 1; i < tag.s.n_untyped && i < 15; ++i) {
-		ipc_write_mr(to, i, ipc_read_mr(from, i));
+	if(typed_last > IPC_MR_COUNT) {
+		set_user_error(from, UE_IPC_MSG_OVERFLOW | UE_IPC_PHASE_SEND);
+		set_user_error(to, UE_IPC_MSG_OVERFLOW | UE_IPC_PHASE_RECV);
+		return;
 	}
 
-	j = -1;
+	ipc_write_mr(to, 0, tag.s.label << 16);
+
+	/*Copy untyped words*/
+	for(untyped_idx = 1; untyped_idx < untyped_last; ++untyped_idx) {
+		ipc_write_mr(to, untyped_idx, ipc_read_mr(from, untyped_idx));
+	}
+
+	typed_item_idx = -1;
 	/* Copy typed words
 	 * FSM: j - number of byte*/
-	for(t = i; t < tag.s.n_typed && i < 15; ++t, ++i) {
-		if(j == -1) {
-			/*If j == -1 - read tag*/
-			ti.raw = ipc_read_mr(from, i);
-			++j;
+	for(typed_idx = untyped_idx; typed_idx < typed_last; ++typed_idx) {
+		if(typed_item_idx == -1) {
+			/*If typed_item_idx == -1 - read ti's tag*/
+			typed_item.raw = ipc_read_mr(from, typed_idx);
+			++typed_item_idx;
 		}
-		else {
+		else if(typed_item.s.header & IPC_TI_MAP_GRANT) {
 			/* MapItem / GrantItem have 1xxx in header */
-			if(ti.s.header & IPC_TI_MAP_GRANT) {
-				tm = ipc_read_mr(from, i);
+			typed_data = ipc_read_mr(from, typed_idx);
 
-				map_area(from->as, to->as, ti.raw & 0xFFFFFFC0, tm & 0xFFFFFFC0,
-							(ti.s.header & IPC_TI_GRANT)? GRANT : MAP, thread_ispriviliged(from));
-			}
+			map_area(from->as, to->as, typed_item.raw & 0xFFFFFFC0, typed_data & 0xFFFFFFC0,
+						(typed_item.s.header & IPC_TI_GRANT)? GRANT : MAP, thread_ispriviliged(from));
+			typed_item_idx = -1;
 		}
+
+		/*TODO: StringItem support*/
 	}
 
 	to->utcb->sender = from->t_globalid;
@@ -83,22 +91,21 @@ void ipc(tcb_t* from, tcb_t* to) {
 void sys_ipc(uint32_t* param1) {
 	/*TODO: Checking of recv-mask*/
 	tcb_t *to_thr = NULL;
-	l4_thread_t to = param1[REG_R0], from = param1[REG_R1];
+	l4_thread_t to_tid = param1[REG_R0], from_tid = param1[REG_R1];
 
-	if(to != L4_NILTHREAD) {
-		to_thr =  thread_by_globalid(to);
+	if(to_tid != L4_NILTHREAD) {
+		to_thr =  thread_by_globalid(to_tid);
 
 		if((to_thr && to_thr->state == T_RECV_BLOCKED)
-				|| to == caller->t_globalid ) {
-			/* To thread who waiting us or
-			 * send myself*/
-			ipc(caller, to_thr);
+				|| to_tid == caller->t_globalid ) {
+			/* To thread who waiting us or send myself*/
+			do_ipc(caller, to_thr);
 		}
 		else if(to_thr && to_thr->state == T_INACTIVE &&
 				GLOBALID_TO_TID(to_thr->utcb->t_pager) == GLOBALID_TO_TID(caller->t_globalid)) {
 			/* That is thread start protocol */
 
-			dbg_printf(DL_IPC, "IPC: %t thread start\n", to);
+			dbg_printf(DL_IPC, "IPC: %t thread start\n", to_tid);
 
 			thread_init_ctx((void*) ipc_read_mr(caller, 2),
 							(void*) ipc_read_mr(caller, 1), to_thr);
@@ -107,16 +114,16 @@ void sys_ipc(uint32_t* param1) {
 		else  {
 			/*No waiting, block myself*/
 			caller->state = T_SEND_BLOCKED;
-			caller->utcb->intended_receiver = to;
+			caller->utcb->intended_receiver = to_tid;
 
 			dbg_printf(DL_IPC, "IPC: %t sending\n", caller->t_globalid);
 		}
 	}
 
-	if(from != L4_NILTHREAD) {
+	if(from_tid != L4_NILTHREAD) {
 		/*Only receive phases, simply lock myself*/
 		caller->state = T_RECV_BLOCKED;
-		caller->ipc_from = from;
+		caller->ipc_from = from_tid;
 
 		dbg_printf(DL_IPC, "IPC: %t receiving\n", caller->t_globalid);
 	}
@@ -132,7 +139,7 @@ uint32_t ipc_deliver(void* data) {
 		if(thr->state == T_RECV_BLOCKED && thr->ipc_from != L4_NILTHREAD) {
 			from_thr = thread_by_globalid(thr->ipc_from);
 
-			ipc(from_thr, thr);
+			do_ipc(from_thr, thr);
 		}
 	}
 

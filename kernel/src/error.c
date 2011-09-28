@@ -23,33 +23,20 @@ const char* reg_names[13] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
 		"r8", "r9", "r10", "r11", "r12"};
 const char* spec_reg_names[6] = {"PSR", "MSP", "PSP", "BASEPRI", "FAULTMASK", "CONTROL"};
 
-void set_user_error(enum user_error_t error) {
-	if(caller) {
-		assert(!caller->utcb);
+void set_user_error(tcb_t* thread, enum user_error_t error) {
+	assert(thread && thread->utcb);
 
-		caller->utcb->error_code = error;
+	thread->utcb->error_code = error;
+}
+
+void set_caller_error(enum user_error_t error) {
+	if(caller) {
+		set_user_error(caller, error);
 	}
 	else {
 		panic("User-level error %d during in-kernel call!", error);
 	}
 }
-
-#if 0
-void panic_dump_regs() {
-	int reg;
-
-	dbg_puts("\n\nRegisters:\n");
-
-	for(reg = 0; reg < 13; ++reg) {
-		dbg_printf(DL_EMERG, "%3s: %p ", reg_names[reg], panic_regs[reg]);
-		if(reg % 4 == 0) dbg_putchar('\n');
-	}
-
-	for(reg = 0; reg < 6; ++reg) {
-		dbg_printf(DL_EMERG, "%s: %p\n", spec_reg_names[reg], panic_spec_regs[reg]);
-	}
-}
-#endif
 
 #ifdef CONFIG_PANIC_DUMP_STACK
 
@@ -76,10 +63,6 @@ void panic_impl(char* fmt, ...) {
 
 	irq_disable();
 	dbg_vprintf(DL_EMERG, fmt, va);
-
-#if 0
-	panic_dump_regs();
-#endif
 
 	panic_dump_stack();
 

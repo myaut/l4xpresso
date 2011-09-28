@@ -14,6 +14,7 @@ Author: myaut
 #include <debug.h>
 #include <thread.h>
 #include <lib/ktable.h>
+#include <fpage_impl.h>
 
 #include <kip.h>
 
@@ -62,7 +63,6 @@ static mempool_t memmap[] = {
 };
 
 DECLARE_KTABLE(as_t, as_table, CONFIG_MAX_ADRESS_SPACES);
-DECLARE_KTABLE(fpage_t, fpage_table, CONFIG_MAX_FPAGES);
 
 extern kip_mem_desc_t* mem_desc;
 extern char* kip_extra;
@@ -76,19 +76,6 @@ memptr_t addr_align(memptr_t addr, size_t size) {
 		return (addr & ~(size - 1)) + size;
 	else
 		return (addr & ~(size - 1));
-}
-
-int fp_addr_log2(memptr_t addr) {
-	int shift = 0;
-
-	while ((addr <<= 1) != 0) ++shift;
-
-	return 31 - shift;
-}
-
-int addr_in_fpage(memptr_t addr, fpage_t* fpage) {
-	return (addr >= fpage->fpage.base &&
-			 addr <= fpage->fpage.base + (1 << fpage->fpage.shift));
 }
 
 memptr_t mempool_align(int mpid, memptr_t addr) {
@@ -127,8 +114,9 @@ void memory_init() {
 	int i = 0, j = 0;
 	uint32_t* shcsr = (uint32_t*) 0xE000ED24;
 
+	fpages_init();
+
 	ktable_init(&as_table);
-	ktable_init(&fpage_table);
 
 	mem_desc = (kip_mem_desc_t*) kip_extra;
 
@@ -153,199 +141,7 @@ void memory_init() {
 	*shcsr |= 1 << 16;	/*Enable memfault*/
 }
 
-/* -------------------------------------
- * Fpage && fpage chain functions
- * ------------------------------------- */
 
-/**
- * Insert chain of fpages into address space
- * @param first,last (first, last) - fpage chain
- * @param as address space
- * 
- * NOTE: as and fpage chain couldn't overlap
- * if they do, use insert_fpage_to_as which checks every fpage
- * */
-void insert_fpage_chain_to_as(as_t* as, fpage_t* first, fpage_t* last) {
-	fpage_t* p = as->first;
-
-	if(!p) {
-		/*First chain in AS*/
-		as->first = first;
-		return;
-	}
-
-	if(last->fpage.base < p->fpage.base) {
-		/*Add chain into beginning*/
-		last->as_next = as->first;
-		as->first = first;
-	}
-	else {
-		/*Search for chain in the middle*/
-		while(p->as_next != NULL) {
-			if(last->fpage.base < p->as_next->fpage.base) {
-				last->as_next = p->as_next;
-				break;
-			}
-
-			p = p->as_next;
-		}
-
-		p->as_next = first;
-	}
-}
-
-void insert_fpage_to_as(as_t* as, fpage_t* fpage) {
-	insert_fpage_chain_to_as(as, fpage, fpage);
-}
-
-void remove_fpage_from_as(as_t* as, fpage_t* fp) {
-	fpage_t* fpprev = as->first;
-
-	while(fpprev->as_next != fp) {
-		/*Fpage from wrong AS*/
-		if(fpprev->as_next == NULL)
-			return;
-
-		fpprev = fpprev->as_next;
-	}
-
-	/*Remove from chain*/
-	fpprev->as_next = fp->as_next;
-}
-
-/* FIXME: Support for bit-bang regions! */
-
-fpage_t* create_fpage(memptr_t base, size_t shift, as_t* as, int mpid) {
-	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
-
-	/*FIXME: check for fpage == NULL*/
-	fpage->as = as;
-	fpage->as_next = NULL;
-	fpage->map_next = fpage; 	/*That is first fpage in mapping*/
-	fpage->fpage.mpid = mpid;
-	fpage->fpage.flags = 0;
-	fpage->fpage.rwx = MP_USER_PERM(memmap[mpid].flags);
-
-	fpage->fpage.base = base;
-	fpage->fpage.shift = shift;
-
-	if(memmap[mpid].flags & MP_MAP_ALWAYS)
-		fpage->fpage.flags |= FPAGE_ALWAYS;
-
-	return fpage;
-}
-
-void create_fpage_chain(memptr_t base, size_t size, as_t* as, int mpid, fpage_t** pfirst, fpage_t** plast) {
-	int shift, sshift, bshift;
-	fpage_t* fpage = NULL;
-
-	while(size) {
-		/* Select lease of log2(base),log2(size). Needed to make regions with correct align*/
-		bshift = fp_addr_log2(base);
-		sshift = fp_addr_log2(size);
-
-		shift = ((1 << bshift) > size)? sshift : bshift;
-
-		if(!*pfirst) {
-			/*Create first page*/
-			fpage = create_fpage(base, shift, as, mpid);
-			*pfirst = fpage;
-			*plast = fpage;
-		}
-		else {
-			/*Build chain*/
-			fpage->as_next = create_fpage(base, shift, as, mpid);
-			*plast = fpage;
-			fpage = fpage->as_next;
-		}
-
-		size -= (1 << shift);
-		base += (1 << shift);
-	}
-}
-
-fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
-	memptr_t base = fpage->fpage.base,
-			 end = fpage->fpage.base + (1 << fpage->fpage.shift);
-	fpage_t *lfirst, *llast, *rfirst, *rlast;
-	split = mempool_align(fpage->fpage.mpid, split);
-
-	if(!as)
-		return NULL;
-
-	/*Check if we can split something*/
-	if(split == base || split == end) {
-		return fpage;
-	}
-
-	if(fpage->map_next != fpage) {
-		/*Splitting not supported for mapped pages*/
-		/*UNIMPLIMENTED*/
-		return NULL;
-	}
-
-	/*Split fpage into two chains of fpages*/
-	create_fpage_chain(base, (split - base), as, fpage->fpage.mpid, &lfirst, &llast);
-	create_fpage_chain(split,(end - split),  as, fpage->fpage.mpid, &rfirst, &rlast);
-
-	remove_fpage_from_as(as, fpage);
-	ktable_free(&fpage_table, fpage);
-
-	insert_fpage_chain_to_as(as, lfirst, llast);
-	insert_fpage_chain_to_as(as, rfirst, rlast);
-
-	if(rl == 0) return lfirst;
-	else return llast;
-}
-
-
-int create_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
-		fpage_t** plast) {
-
-	if(size == 0)
-		return -2;
-
-	/*if mpid is unknown, search using base addr*/
-	if(mpid == -1) {
-		if((mpid = mempool_search(base, size)) == -1) {
-			/* Cannot find appropriate mempool, return error*/
-			return -1;
-		}
-	}
-
-	dbg_printf(DL_MEMORY, "MEM: fpage chain %s [b:%p, sz:%p] as %p\n", memmap[mpid].name, base, size, as);
-
-	create_fpage_chain(mempool_align(mpid, base), mempool_align(mpid, size), as, mpid, pfirst, plast);
-
-	if(as)
-		insert_fpage_chain_to_as(as, *pfirst, *plast);
-
-	return 0;
-}
-
-int create_fpages(as_t* as, memptr_t base, size_t size) {
-	fpage_t *first = NULL, *last = NULL;
-	return create_fpages_ext(-1, as, base, size, &first, &last);
-}
-
-/*
- * Should be platform-specific functions
- */
-void mpu_setup_region(int n, fpage_t* fp) {
-	static uint32_t* mpu_base = (uint32_t*) 0xE000ED9C;
-	static uint32_t* mpu_attr = (uint32_t*) 0xE000EDA0;
-
-	*mpu_base = (fp->fpage.base & 0xFFFFFFE0) | 0x10 | (n & 0xF);
-	*mpu_attr = ((memmap[fp->fpage.mpid].flags & MP_UX)? 0 : (1 << 28)) |	/*XN bit*/
-			0x3  << 24 /*Full access*/ | ((fp->fpage.shift - 1) << 1) /*Region*/ | 1 /*Enable*/;
-}
-
-void mpu_enable(mpu_state_t i) {
-	static uint32_t* mpu_ctrl = (uint32_t*) 0xE000ED94;
-
-	/*0x4 is PRIVDEFENA bit that allows access from kernel*/
-	*mpu_ctrl = i | 0x4;
-}
 
 /* -------------------------------------
  * AS functions
@@ -394,7 +190,7 @@ void as_map_user(as_t* as) {
 		case MPT_USER_DATA:
 		case MPT_USER_TEXT:
 			/* Create fpages only for user text and user data*/
-			create_fpages(as, memmap[i].start, (memmap[i].end - memmap[i].start));
+			assign_fpages(as, memmap[i].start, (memmap[i].end - memmap[i].start));
 		}
 	}
 }
@@ -408,59 +204,6 @@ as_t* as_create(uint32_t as_spaceid) {
 	as->first = NULL;
 
 	return as;
-}
-
-int map_fpage(as_t* src, as_t* dst, fpage_t* fpage, map_action_t action) {
-	fpage_t* fpmap = (fpage_t*) ktable_alloc(&fpage_table);
-
-	/*FIXME: check for fpmap == NULL*/
-	fpmap->as_next = NULL;
-	fpmap->as = dst;
-
-	/*Copy fpage description*/
-	fpmap->raw[0] = fpage->raw[0];
-	fpmap->raw[1] = fpage->raw[1];
-
-	/*Set flags correctly*/
-	if(action == MAP)
-		fpage->fpage.flags |= FPAGE_MAPPED;
-	fpmap->fpage.flags = FPAGE_CLONE;
-
-	/*Insert into mapee list*/
-	fpmap->map_next = fpage->map_next;
-	fpage->map_next = fpmap;
-
-	/*Insert into AS*/
-	insert_fpage_to_as(dst, fpmap);
-
-	dbg_printf(DL_MEMORY, "MEM: %s fpage %p from %p to %p\n", (action == MAP)? "mapped" : "granted", fpage, src, dst);
-
-	return 0;
-}
-
-int unmap_fpage(as_t* as, fpage_t* fpage) {
-	fpage_t* fpprev = fpage;
-
-	dbg_printf(DL_MEMORY, "MEM: unmapped fpage %p from %p\n", fpage, as);
-
-	/* Fpages that are not mapped or granted
-	 * are destroyed with it's AS */
-	if(!(fpage->fpage.flags & FPAGE_CLONE))
-		return -1;
-
-	while(fpprev->map_next != fpage) fpprev = fpprev->map_next;
-	/*Clear flags*/
-	fpprev->fpage.flags &= ~FPAGE_MAPPED;
-
-	fpprev->map_next = fpage->map_next;
-	remove_fpage_from_as(as, fpage);
-
-	if(as->lru == fpage)
-		as->lru = NULL;
-
-	ktable_free(&fpage_table, fpage);
-
-	return 0;
 }
 
 int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged) {
@@ -479,7 +222,7 @@ int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t acti
 	/* FIXME: checking existence of fpages*/
 
 	if(is_priviliged) {
-		create_fpages_ext(-1, src, base, size, &first, &last);
+		assign_fpages_ext(-1, src, base, size, &first, &last);
 		if(src == dst) {
 			/*Maps to itself, ignore other actions*/
 			return 0;
@@ -555,27 +298,6 @@ int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t acti
 	} while(fp != last);
 
 	return 0;
-}
-
-void memmanage_handler(void) {
-	uint32_t mmar = *((uint32_t*) 0xE000ED34);
-	uint32_t mmsr = *((uint32_t*) 0xE000ED28);
-	fpage_t* fp = thread_current()->as->first;
-
-	if(mmsr & (1 << 7)) {
-		while(fp) {
-			fp = fp->as_next;
-
-			if(addr_in_fpage(mmar, fp)) {
-				thread_current()->as->lru = fp;
-				as_setup_mpu(thread_current()->as);
-
-				return;
-			}
-		}
-	}
-
-	panic("Memory fault\n");
 }
 
 #ifdef CONFIG_KDB
