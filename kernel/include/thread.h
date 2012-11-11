@@ -105,6 +105,7 @@ void thread_init_ctx(void* sp, void* pc, tcb_t *thr);
 void thread_switch(tcb_t* thr);
 
 int thread_ispriviliged(tcb_t* thr);
+int thread_isrunnable(tcb_t* thr);
 tcb_t* thread_current();
 
 int schedule();

@@ -185,7 +185,7 @@ void dbg_sync_putchar(char chr) {
 
 void dbg_start_panic()
 {
-	char chr;
+	unsigned char chr;
 
 	/* In panic condition we can be in interrupt context or
 	 * not, so will write symbols synchronously */

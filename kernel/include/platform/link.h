@@ -64,8 +64,9 @@ extern uint32_t* kernel_stack_end_ptr;
 
 #define __PACKED		__attribute__ ((packed))
 
-#define __INLINE 		static inline
-
 #define __NAKED __attribute__ ((naked))
+
+#undef  __INLINE
+#define __INLINE		static inline
 
 #endif /* LINK_H_ */

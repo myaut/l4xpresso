@@ -31,6 +31,11 @@ __INLINE void irq_enable(void) {
 	__ASM volatile ("cpsie i");
 }
 
+__INLINE void irq_svc(void) {
+	__ASM volatile ("svc #0");
+}
+
+
 __INLINE int irq_number() {
 	int irqno;
 

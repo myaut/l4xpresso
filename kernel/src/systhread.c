@@ -7,6 +7,7 @@
 
 #include <platform/armv7m.h>
 #include <platform/link.h>
+#include <platform/irq.h>
 #include <softirq.h>
 #include <thread.h>
 #include <memory.h>
@@ -17,9 +18,9 @@
  * @brief Three main system threads: kernel, root and idle
  * */
 
-static tcb_t* idle;
-static tcb_t* kernel;
-static tcb_t* root;
+tcb_t* idle;
+tcb_t* kernel;
+tcb_t* root;
 
 extern void root_thread(void);
 utcb_t root_utcb	__KIP;
@@ -67,7 +68,11 @@ void set_kernel_state(thread_state_t state) {
 
 void kernel_thread() {
 	while(1) {
-		softirq_execute();
+		/* If all softirqs processed, call SVC to
+		 * switch context immediately*/
+		if(softirq_execute()) {
+			irq_svc();
+		}
 	}
 }
 

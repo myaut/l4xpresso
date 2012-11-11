@@ -44,12 +44,6 @@ void debug_kdb_handler(void) {
 
 extern dbg_layer_t dbg_layer;
 
-uint32_t test_panic(void* data) {
-	panic("Test panic");
-
-	return 0;
-}
-
 int main(void) {
 	dbg_uart_init(115200);
 	dbg_puts("\n\n---------------------------------------"
@@ -75,8 +69,6 @@ int main(void) {
 	create_root_thread();
 
 	mpu_enable(MPU_ENABLED);
-
-	ktimer_event_create(16384, test_panic, NULL);
 
 	irq_enable();
 

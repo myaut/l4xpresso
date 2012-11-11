@@ -9,6 +9,7 @@
  * Fpage && fpage chain functions
  * ------------------------------------- */
 
+#include <types.h>
 #include <memory.h>
 #include <fpage.h>
 #include <fpage_impl.h>
@@ -28,10 +29,6 @@ int fp_addr_log2(memptr_t addr) {
 	while ((addr <<= 1) != 0) ++shift;
 
 	return 31 - shift;
-}
-
-int addr_in_fpage(memptr_t addr, fpage_t* fpage) {
-	return (addr >= FPAGE_BASE(fpage) && addr <= FPAGE_END(fpage));
 }
 
 
@@ -117,7 +114,7 @@ void remove_fpage_from_as(as_t* as, fpage_t* fp) {
 fpage_t* create_fpage(memptr_t base, size_t shift, int mpid) {
 	fpage_t* fpage = (fpage_t*) ktable_alloc(&fpage_table);
 
-	assert(fpage);
+	assert(fpage != NULL);
 
 	fpage->as_next = NULL;
 	fpage->map_next = fpage; 	/*That is first fpage in mapping*/
@@ -200,7 +197,6 @@ fpage_t* split_fpage(as_t* as, fpage_t* fpage, memptr_t split, int rl) {
 
 int assign_fpages_ext(int mpid, as_t* as, memptr_t base, size_t size, fpage_t** pfirst,
 		fpage_t** plast) {
-	assert(as);
 	assert(size > 0);
 
 	/*if mpid is unknown, search using base addr*/

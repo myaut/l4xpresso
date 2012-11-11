@@ -122,8 +122,8 @@ int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t acti
 as_t* as_create(uint32_t as_spaceid);
 void as_setup_mpu(as_t* as);
 void as_map_user(as_t* as);
+
 void mpu_enable(mpu_state_t i);
-
-
+void mpu_setup_region(int n, struct fpage* fp);
 
 #endif /* MEMORY_H_ */

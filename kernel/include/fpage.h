@@ -10,6 +10,7 @@
 
 #include <memory.h>
 #include <types.h>
+#include <platform/link.h>
 
 #define FPAGE_ALWAYS    0x1     /*!Fpage is always mapped in mpu*/
 #define FPAGE_CLONE     0x2     /*!Fpage is mapped from other as*/
@@ -47,5 +48,9 @@ typedef struct fpage fpage_t;
 #define FPAGE_BASE(fp) 	(fp)->fpage.base
 #define FPAGE_SIZE(fp)  (1 << (fp)->fpage.shift)
 #define FPAGE_END(fp)	(FPAGE_BASE(fp) + FPAGE_SIZE(fp))
+
+__INLINE int addr_in_fpage(memptr_t addr, fpage_t* fpage) {
+	return (addr >= FPAGE_BASE(fpage) && addr <= FPAGE_END(fpage));
+}
 
 #endif /* FPAGE_H_ */

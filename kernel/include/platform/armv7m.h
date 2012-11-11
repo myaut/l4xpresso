@@ -12,9 +12,7 @@ Author: myaut
 #define ARMV7M_H_
 
 #include <types.h>
-
-#define __ASM 	__asm
-#define __INLINE static inline
+#include <platform/link.h>
 
 __INLINE void wait_for_interrupt() {
 	__ASM volatile ("wfi");

@@ -15,6 +15,7 @@
 #include <debug.h>
 #include <platform/irq.h>
 #include <platform/armv7m.h>
+#include <fpage_impl.h>
 
 /**
  * @file    thread.c
@@ -34,8 +35,7 @@
  * Also dispatcher is responsible for switching contexts (but not scheduling)
  */
 
-DECLARE_KTABLE(tcb_t, thread_table, CONFIG_MAX_THREADS)
-;
+DECLARE_KTABLE(tcb_t, thread_table, CONFIG_MAX_THREADS);
 
 /* Always sorted, so we can use binary search on it */
 tcb_t* thread_map[CONFIG_MAX_THREADS];
@@ -111,7 +111,8 @@ void thread_map_insert(l4_thread_t globalid, tcb_t* thr) {
 	if (thread_count == 0) {
 		thread_map[thread_count++] = thr;
 	} else {
-		int i = thread_map_search(globalid, 0, thread_count), j;
+		int i = thread_map_search(globalid, 0, thread_count);
+		int j = thread_count;
 
 		/* Move forward
 		 * Don't check if count is out of range,
@@ -165,7 +166,7 @@ tcb_t* thread_create(l4_thread_t globalid, utcb_t* utcb) {
 
 	id = GLOBALID_TO_TID(globalid);
 
-	assert(caller);
+	assert(caller != NULL);
 
 	if (id < THREAD_SYS
 			|| globalid == L4_ANYTHREAD
@@ -280,12 +281,14 @@ int thread_ispriviliged(tcb_t* thread) {
 /* Switch context
  * */
 void thread_switch(tcb_t* thr) {
-	assert(thr);
+	assert(thr != NULL);
 	assert(thread_isrunnable(thr));
 
 	current = thr;
 	if (current->as)
 		as_setup_mpu(current->as);
+
+	dbg_printf(DL_THREAD, "Switching to %x pc: %p\n", thr->t_globalid, ((uint32_t*) thr->ctx.sp)[REG_PC]);
 }
 
 #ifdef CONFIG_KDB

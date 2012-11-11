@@ -22,7 +22,13 @@ tcb_t* caller;
 uint32_t syscall;
 
 void __svc_handler() {
+	extern tcb_t* kernel;
+
 	caller = thread_current();
+
+	/*Kernel requests context switch, satisfy it*/
+	if(caller == kernel)
+		return;
 
 	caller->state = T_SVC_BLOCKED;
 
@@ -41,7 +47,7 @@ void sys_thread_control(uint32_t* param1, uint32_t* param2) {
 	l4_thread_t	pager = param1[REG_R3];
 	void* utcb = (void*) param2[0];	/*R4*/
 
-	mempool_t* utcb_pool = mempool_getbyid(mempool_search(utcb, UTCB_SIZE));
+	mempool_t* utcb_pool = mempool_getbyid(mempool_search((memptr_t) utcb, UTCB_SIZE));
 
 	if(!utcb_pool || !(utcb_pool->flags & (MP_UR | MP_UW))) {
 		/*Incorrect UTCB relocation*/

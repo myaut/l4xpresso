@@ -31,7 +31,7 @@ void set_user_error(tcb_t* thread, enum user_error_t error) {
 
 void set_caller_error(enum user_error_t error) {
 	if(caller) {
-		set_user_error(caller, error);
+		set_user_error((tcb_t*) caller, error);
 	}
 	else {
 		panic("User-level error %d during in-kernel call!", error);

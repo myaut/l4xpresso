@@ -39,6 +39,7 @@ int softirq_execute(void) {
 	uint32_t softirq_schedule = 0, executed = 0;
 	int i;
 
+retry:
 	for(i = 0; i < NR_SOFTIRQ; ++i) {
 		if(atomic_get(&(softirq[i].schedule)) != 0
 				&& softirq[i].handler) {
@@ -54,11 +55,16 @@ int softirq_execute(void) {
 	/* Must ensure that no interrupt reschedule its softirq */
 	irq_disable();
 
-	for(i = 0; i < NR_SOFTIRQ; ++i)
+	softirq_schedule = 0;
+	for(i = 0; i < NR_SOFTIRQ; ++i) {
 		softirq_schedule |= softirq[i].schedule;
+	}
 
 	set_kernel_state((softirq_schedule)? T_RUNNABLE : T_INACTIVE);
 	irq_enable();
+
+	if(softirq_schedule)
+		goto retry;
 
 	return executed;
 }

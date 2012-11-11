@@ -109,6 +109,8 @@ void __USER_TEXT __root_thread(kip_t* kip_ptr, utcb_t* utcb_ptr) {
 	l4_thread_t myself = utcb_ptr->t_globalid;
 	char* free_mem = get_free_base(kip_ptr);
 
+	uint32_t msg[8] = {0};
+
 	/*Allocate utcbs and stacks in Free memory region*/
 	char* utcbs[2] = {free_mem, free_mem + UTCB_SIZE};
 	char* stacks[2] = {free_mem + 2*UTCB_SIZE, free_mem + 2*UTCB_SIZE + STACK_SIZE};
@@ -126,7 +128,7 @@ void __USER_TEXT __root_thread(kip_t* kip_ptr, utcb_t* utcb_ptr) {
 	L4_Start(threads[PONG_THREAD], pong_thread, stacks[PONG_THREAD] + STACK_SIZE);
 
 	while(1) {
-		;
+		L4_Ipc(L4_NILTHREAD, L4_NILTHREAD, 0, msg);
 	}
 }
 
