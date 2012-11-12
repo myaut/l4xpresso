@@ -21,4 +21,6 @@ void kdb_print_menu();
 void kdb_register_ktable(ktable_t* kt);
 void kdb_dump_ktable();
 
+int kdb_dump_error();
+
 #endif /* KDB_H_ */

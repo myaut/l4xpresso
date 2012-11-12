@@ -16,6 +16,7 @@ Author: myaut
 #include <memory.h>
 #include <config.h>
 #include <ipc.h>
+#include <sched.h>
 
 extern tcb_t* caller;
 
@@ -85,6 +86,10 @@ void do_ipc(tcb_t* from, tcb_t* to) {
 	to->ipc_from = L4_NILTHREAD;
 	from->state = T_RUNNABLE;
 
+	/*Dispatch communicating threads*/
+	sched_slot_dispatch(SSI_NORMAL_THREAD, from);
+	sched_slot_dispatch(SSI_IPC_THREAD, to);
+
 	dbg_printf(DL_IPC, "IPC: %t to %t\n", caller->t_globalid, to->t_globalid);
 }
 
@@ -110,6 +115,9 @@ void sys_ipc(uint32_t* param1) {
 			thread_init_ctx((void*) ipc_read_mr(caller, 2),
 							(void*) ipc_read_mr(caller, 1), to_thr);
 			caller->state = T_RUNNABLE;
+
+			/*Start thread*/
+			to_thr->state = T_RUNNABLE;
 		}
 		else  {
 			/*No waiting, block myself*/

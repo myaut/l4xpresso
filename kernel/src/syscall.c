@@ -24,12 +24,11 @@ uint32_t syscall;
 void __svc_handler() {
 	extern tcb_t* kernel;
 
-	caller = thread_current();
-
 	/*Kernel requests context switch, satisfy it*/
-	if(caller == kernel)
+	if(thread_current() == kernel)
 		return;
 
+	caller = thread_current();
 	caller->state = T_SVC_BLOCKED;
 
 	softirq_schedule(SYSCALL_SOFTIRQ);

@@ -64,6 +64,10 @@ void panic_impl(char* fmt, ...) {
 	irq_disable();
 	dbg_vprintf(DL_EMERG, fmt, va);
 
+#ifdef CONFIG_KDB
+	kdb_dump_error();
+#endif
+
 	panic_dump_stack();
 
 	while(1);

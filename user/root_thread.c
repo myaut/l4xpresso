@@ -11,6 +11,7 @@ Author: myaut
 #include <l4/thread.h>
 #include <l4/kip.h>
 #include <l4/utcb.h>
+#include <l4/ipc.h>
 #include <types.h>
 
 #define L4_THREAD_NUM(n, b) ((b + n) << 14)
@@ -57,14 +58,25 @@ int __USER_TEXT L4_Start(l4_thread_t who, void* pc, void* sp) {
 }
 
 int __USER_TEXT L4_Map(l4_thread_t where, memptr_t base, size_t size) {
-	uint32_t	msg[8];
+	union {
+		struct {
+			ipc_msg_tag_t tag;
+			ipc_typed_item map1;
+			ipc_typed_item map2;
+		};
+		uint32_t	raw[8];
+	} msg;
 
-	/*Contains 2 untyped words*/
-	msg[0] = 2 << 6;
-	msg[1] = base & 0xFFFFFFC0 | 0xB;
-	msg[2] = size | 0xB;
+	msg.tag.raw = 0;
+	msg.tag.s.n_typed = 2;
 
-	L4_Ipc(where, L4_NILTHREAD, 0, msg);
+	msg.map1.map.header = IPC_TI_MAP_GRANT;
+	msg.map1.map.base = base >> 4;
+
+	msg.map2.map.header = IPC_TI_MAP_GRANT;
+	msg.map2.map.base = size >> 4;
+
+	L4_Ipc(where, L4_NILTHREAD, 0, msg.raw);
 }
 
 enum	{PING_THREAD, PONG_THREAD};
@@ -103,7 +115,7 @@ memptr_t __USER_TEXT get_free_base(kip_t* kip_ptr) {
 	return 0;
 }
 
-#define STACK_SIZE 128
+#define STACK_SIZE 256
 
 void __USER_TEXT __root_thread(kip_t* kip_ptr, utcb_t* utcb_ptr) {
 	l4_thread_t myself = utcb_ptr->t_globalid;

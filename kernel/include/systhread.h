@@ -14,6 +14,7 @@ void create_root_thread();
 void create_kernel_thread();
 void create_idle_thread();
 
+void switch_to_kernel();
 void set_kernel_state(thread_state_t state);
 
 #endif /* SYSTHREAD_H_ */

@@ -13,6 +13,7 @@
 #include <config.h>
 #include <error.h>
 #include <debug.h>
+#include <sched.h>
 #include <platform/irq.h>
 #include <platform/armv7m.h>
 #include <fpage_impl.h>
@@ -59,6 +60,8 @@ fpage_t *kip_fpage, *kip_extra_fpage;
 extern kip_t kip;
 extern char* kip_extra;
 
+tcb_t* thread_sched(sched_slot_t*);
+
 void thread_init_subsys() {
 	fpage_t* last = NULL;
 
@@ -71,6 +74,8 @@ void thread_init_subsys() {
 	 * last is ignored, because kip fpages is aligned*/
 	assign_fpages_ext(-1, NULL, (memptr_t) &kip, sizeof(kip_t), &kip_fpage, &last);
 	assign_fpages_ext(-1, NULL, (memptr_t) kip_extra, CONFIG_KIP_EXTRA_SIZE, &kip_extra_fpage, &last);
+
+	sched_slot_set_handler(SSI_NORMAL_THREAD, thread_sched);
 }
 
 extern tcb_t* caller;
@@ -225,7 +230,7 @@ void thread_space(tcb_t* thr, l4_thread_t spaceid, utcb_t* utcb) {
 
 void thread_init_ctx(void* sp, void* pc, tcb_t *thr) {
 	/* Reserve 8 words for fake context */
-	sp -= 8 * sizeof(uint32_t);
+	sp -= RESERVED_STACK;
 	thr->ctx.sp = (uint32_t) sp;
 
 	/* Set EXC_RETURN and CONTROL for thread and create initial stack for it
@@ -251,6 +256,18 @@ void thread_init_ctx(void* sp, void* pc, tcb_t *thr) {
 	((uint32_t*) sp)[REG_LR] = 0xFFFFFFFF;
 	((uint32_t*) sp)[REG_PC] = (uint32_t) pc;
 	((uint32_t*) sp)[REG_xPSR] = 0x1000000; /* Thumb bit on*/
+}
+
+/* Kernel has no fake context, instead of that we rewind
+ * stack and reuse it for kernel thread
+ *
+ * Stack will be created after first interrupt*/
+void thread_init_kernel_ctx(void* sp, tcb_t* thr) {
+	sp -= RESERVED_STACK;
+
+	thr->ctx.sp = (uint32_t) sp;
+	thr->ctx.ret = 0xFFFFFFF9;
+	thr->ctx.ctl = 0x0;
 }
 
 /*
@@ -286,9 +303,34 @@ void thread_switch(tcb_t* thr) {
 
 	current = thr;
 	if (current->as)
-		as_setup_mpu(current->as);
+		as_setup_mpu(current->as, current->ctx.sp);
+}
 
-	dbg_printf(DL_THREAD, "Switching to %x pc: %p\n", thr->t_globalid, ((uint32_t*) thr->ctx.sp)[REG_PC]);
+/* Select normal thread to run
+ *
+ * NOTE: all threads are derived from root*/
+tcb_t* thread_select(tcb_t* parent) {
+	tcb_t* thr = parent->t_child, *child = NULL;
+
+	while(thr != NULL) {
+		if(thread_isrunnable(thr))
+			return thr;
+
+		child = thread_select(thr);
+
+		if(child && thread_isrunnable(child))
+			return child;
+
+		thr = thr->t_sibling;
+	}
+
+	return NULL;
+}
+
+tcb_t* thread_sched(sched_slot_t* slot) {
+	extern tcb_t* root;
+
+	return thread_select(root);
 }
 
 #ifdef CONFIG_KDB

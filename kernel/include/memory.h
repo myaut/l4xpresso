@@ -120,8 +120,9 @@ mempool_t* mempool_getbyid(int mpid);
 int map_area(as_t* src, as_t* dst, memptr_t base, size_t size, map_action_t action, int is_priviliged);
 
 as_t* as_create(uint32_t as_spaceid);
-void as_setup_mpu(as_t* as);
+void as_setup_mpu(as_t* as, memptr_t sp);
 void as_map_user(as_t* as);
+void as_map_ktext(as_t* as);
 
 void mpu_enable(mpu_state_t i);
 void mpu_setup_region(int n, struct fpage* fp);

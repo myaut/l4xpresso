@@ -74,8 +74,20 @@ __INLINE int irq_number() {
 	__ASM volatile("cpsie i");									\
 	__ASM volatile("bx lr");
 
+/* Initial context switches to kernel.
+ * It simulates interrupt to save corect context on stack
+ * When interrupts are enabled it will jump to interrupt handler
+ * than return to normal execution of kernel code  */
+#define init_ctx_switch(ctx, pc)							\
+	__ASM volatile("mov r0, %0" : : "r"((ctx)->sp));		\
+	__ASM volatile("msr msp, r0");							\
+	__ASM volatile("mov r1, %0" : : "r" (pc));				\
+	__ASM volatile("cpsie i");								\
+	__ASM volatile("bx r1");								\
+
+
 /*
- * Context switching is doing on interrupt return
+ * Context is switched on interrupt return
  * We check if nobody schedules actions in kernel (SOFTIRQs)
  * Then do context switch
  *
@@ -93,6 +105,8 @@ __INLINE int irq_number() {
 		schedule();											\
 		irq_return(&current->ctx);							\
 	}
+
+
 
 extern volatile tcb_t* current;
 

@@ -14,8 +14,9 @@ Author: myaut
 
 kip_t kip __KIP = {
 	.kernel_id = 0x00000000,
-	.api_version = 0x8507000,	/*Ver. M.2 Rev. 1*/
-	.api_flags	= 0x00000000,	/*Little endian 32-bit*/
+
+	.api_version.raw = 0x8507000,	/*Ver. M.2 Rev. 1*/
+	.api_flags.raw	= 0x00000000,	/*Little endian 32-bit*/
 };
 
 /*Extra information on KIP*/

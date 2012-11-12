@@ -8,6 +8,7 @@
 #include <fpage.h>
 #include <memory.h>
 #include <error.h>
+#include <platform/irq.h>
 #include <platform/mpu.h>
 
 void mpu_setup_region(int n, fpage_t* fp) {
@@ -25,23 +26,53 @@ void mpu_enable(mpu_state_t i) {
 	*mpu_ctrl = i | MPU_PRIVDEFENA;
 }
 
-void memmanage_handler(void) {
+int mpu_select_lru(as_t* as, uint32_t addr) {
+	fpage_t* fp = NULL;
+
+	/*Kernel fault?*/
+	if(as == NULL)
+		return 1;
+
+	fp = as->first;
+
+	/* No need to setup mpu here
+	 * because it will be done when context switches*/
+
+	while(fp) {
+		if(addr_in_fpage(addr, fp)) {
+			as->lru = fp;
+			return 0;
+		}
+
+		fp = fp->as_next;
+	}
+
+	return 1;
+}
+
+void __memmanage_handler(void) {
 	uint32_t mmsr = *((uint32_t*) MPU_FAULT_STATUS_ADDR);
 	uint32_t mmar = *((uint32_t*) MPU_FAULT_ADDRESS_ADDR);
-	fpage_t* fp = thread_current()->as->first;
+	tcb_t* current = thread_current();
+
+	/*Stack / Unstacking errors*/
+	if(mmsr & MPU_MUSTKERR || mmsr & MPU_MSTKERR) {
+		/*Processor is not writing mmar, so we do it manually*/
+		if(mpu_select_lru(current->as, current->ctx.sp) == 0)
+			goto ok;
+	}
 
 	if(mmsr & MPU_MEM_FAULT) {
-		while(fp) {
-			fp = fp->as_next;
-
-			if(addr_in_fpage(mmar, fp)) {
-				thread_current()->as->lru = fp;
-				as_setup_mpu(thread_current()->as);
-
-				return;
-			}
-		}
+		if(mpu_select_lru(current->as, mmar) == 0)
+			goto ok;
 	}
 
 	panic("Memory fault\n");
+
+ok:
+	/*Clean status register*/
+	*((uint32_t*) MPU_FAULT_STATUS_ADDR) = 0;
+	return;
 }
+
+IRQ_HANDLER(memmanage_handler, __memmanage_handler);

@@ -40,8 +40,8 @@ SYSTEM_CALL_BASE = 0x00000800;
 KERNEL_BASE = 0x00001000;
 USERSPACE_BASE = 0x00000C000;
 
-INIT_STACK_SIZE		 = 0x00000300;
-KERNEL_STACK_SIZE    = 0x00000400;
+IDLE_STACK_SIZE		 = 0x00000100;
+KERNEL_STACK_SIZE    = 0x00000300;
 ROOT_THREAD_STACK_SIZE    = 0x00000200;
 
 GROUP(libcr_c.a libcr_eabihelpers.a) 
@@ -67,10 +67,11 @@ SECTIONS {
 	
 	.stack :
 	{
-		. += INIT_STACK_SIZE;
-		init_stack_addr = .;
-		. = KERNEL_STACK_SIZE;
-		kernel_stack_addr = .;
+		idle_stack_start = .;
+		. += IDLE_STACK_SIZE;
+		idle_stack_end = .;
+		. += KERNEL_STACK_SIZE;
+		kernel_stack_end = .;
 	} > RamLoc32
 	
 	.data :

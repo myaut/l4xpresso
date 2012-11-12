@@ -55,6 +55,7 @@ int main(void) {
 
 	irq_disable();
 
+	sched_init();
 	memory_init();
 	syscall_init();
 	thread_init_subsys();
@@ -64,17 +65,19 @@ int main(void) {
 	softirq_register(KDB_SOFTIRQ, debug_kdb_handler);
 #	endif
 
+	/* Not creating kernel thread here because it
+	 * corrupts current stack*/
 	create_idle_thread();
-	create_kernel_thread();
 	create_root_thread();
+
+	ktimer_event_create(64, ipc_deliver, NULL);
 
 	mpu_enable(MPU_ENABLED);
 
-	irq_enable();
+	switch_to_kernel();
 
-	/* Wait. After first interrupt (i.e. from timer),
-	 * we will jump to thread*/
-	wait_for_interrupt();
+	/*NOTREACHED*/
+	return 0;
 }
 
 void init_zero_seg(uint32_t* dst, uint32_t* dst_end) {

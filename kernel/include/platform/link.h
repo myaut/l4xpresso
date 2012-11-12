@@ -28,8 +28,9 @@ extern uint32_t kernel_bss_end;
 extern uint32_t kernel_ahb_start;
 extern uint32_t kernel_ahb_end;
 
-extern uint32_t init_stack_addr;
-extern uint32_t kernel_stack_addr;
+extern uint32_t idle_stack_start;
+extern uint32_t idle_stack_end;
+extern uint32_t kernel_stack_end;
 
 extern uint32_t user_text_start;
 extern uint32_t user_text_end;

@@ -42,5 +42,6 @@ enum register_stack_t {
 	REG_xPSR
 };
 
+#define RESERVED_STACK		8 * sizeof(uint32_t)
 
 #endif /* ARMV7M_H_ */

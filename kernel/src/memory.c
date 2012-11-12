@@ -147,20 +147,21 @@ void memory_init() {
  * AS functions
  * ------------------------------------- */
 
-void as_setup_mpu(as_t* as) {
+void as_setup_mpu(as_t* as, memptr_t sp) {
 	fpage_t* mpu[8];
 	fpage_t* fp = as->first;
 	int i = 0, j = 7, k = 0;
 
 	/*
 	 * We walk thru fpage list
-	 * [0:k] are always-mapped fpages + LRU page
+	 * [0:k] are always-mapped fpages + LRU page + stack page
 	 * [k:7] are others
 	 * */
 
 	while(fp != NULL) {
 		if(fp->fpage.flags & FPAGE_ALWAYS ||
-				fp == as->lru) {
+		   fp == as->lru ||
+		   addr_in_fpage(sp, fp)) {
 			if(k < 8)
 				mpu[k++] = fp;
 		}
@@ -190,6 +191,16 @@ void as_map_user(as_t* as) {
 		case MPT_USER_DATA:
 		case MPT_USER_TEXT:
 			/* Create fpages only for user text and user data*/
+			assign_fpages(as, memmap[i].start, (memmap[i].end - memmap[i].start));
+		}
+	}
+}
+
+void as_map_ktext(as_t* as) {
+	int i;
+
+	for(i = 0; i < sizeof(memmap) / sizeof(mempool_t); ++i) {
+		if(memmap[i].tag == MPT_KERNEL_TEXT) {
 			assign_fpages(as, memmap[i].start, (memmap[i].end - memmap[i].start));
 		}
 	}

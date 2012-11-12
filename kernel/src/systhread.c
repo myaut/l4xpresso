@@ -11,6 +11,7 @@
 #include <softirq.h>
 #include <thread.h>
 #include <memory.h>
+#include <fpage_impl.h>
 #include <sched.h>
 
 /*
@@ -42,24 +43,30 @@ void create_root_thread() {
 }
 
 void create_kernel_thread() {
-	/* Reserve 24 words (16 for context and 8 extra-words) for IDLE stack*/
-	kernel_stack_end_ptr = ((uint32_t) &kernel_stack_addr - 96) & 0xFFFFFFFC;
-
 	kernel = thread_init(TID_TO_GLOBALID(THREAD_KERNEL), NULL);
-	thread_init_ctx((void*) kernel_stack_end_ptr, kernel_thread, kernel);
 
+	thread_init_kernel_ctx(&kernel_stack_end, kernel);
+
+	/* This will prevent running other threads
+	 * than kernel until it will be initialized*/
 	sched_slot_dispatch(SSI_SOFTIRQ, kernel);
+	kernel->state = T_RUNNABLE;
 }
 
 void create_idle_thread() {
 	idle = thread_init(TID_TO_GLOBALID(THREAD_IDLE), NULL);
-	thread_init_ctx(&kernel_stack_addr, idle_thread, idle);
+	thread_init_ctx((void*) &idle_stack_end, idle_thread, idle);
 
 	sched_slot_dispatch(SSI_IDLE, idle);
-
-	/*Switch IDLE thread (it is always runnable)*/
 	idle->state = T_RUNNABLE;
-	thread_switch(idle);
+}
+
+void switch_to_kernel() __NAKED;
+void switch_to_kernel() {
+	create_kernel_thread();
+
+	current = kernel;
+	init_ctx_switch(&kernel->ctx, kernel_thread);
 }
 
 void set_kernel_state(thread_state_t state) {
@@ -70,9 +77,8 @@ void kernel_thread() {
 	while(1) {
 		/* If all softirqs processed, call SVC to
 		 * switch context immediately*/
-		if(softirq_execute()) {
-			irq_svc();
-		}
+		softirq_execute();
+		irq_svc();
 	}
 }
 

@@ -18,6 +18,17 @@
 
 static sched_slot_t slots[NUM_SCHED_SLOTS];
 
+int sched_init() {
+	int slot_id;
+
+	for(slot_id = 0; slot_id < NUM_SCHED_SLOTS; ++slot_id) {
+		slots[slot_id].ss_scheduled = NULL;
+		slots[slot_id].ss_handler =   NULL;
+	}
+
+	return 0;
+}
+
 int schedule() {
 	int slot_id;
 	tcb_t* scheduled = NULL;
